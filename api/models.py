@@ -238,3 +238,4 @@ class BenchmarkObservation(Base):
     restaurant: Mapped["Restaurant"] = relationship("Restaurant", back_populates="benchmark_observations")
     canonical_item: Mapped["CanonicalItem"] = relationship("CanonicalItem", back_populates="benchmark_observations")
     supplier: Mapped["Supplier"] = relationship("Supplier", back_populates="benchmark_observations")
+
