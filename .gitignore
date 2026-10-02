@@ -5,6 +5,7 @@ __pycache__/
 *$py.class
 *.env
 .env.*
+!.env.example
 
 # Node / Next.js
 node_modules/
