@@ -247,14 +247,15 @@ def upgrade() -> None:
         FOREACH v_radius IN ARRAY v_radii LOOP
             -- Count distinct restaurants and total observations in this cell
             SELECT 
-                COUNT(DISTINCT restaurant_id),
                 COUNT(*),
+                COALESCE(SUM(cnt), 0),
                 COALESCE(MAX(restaurant_share), 0)
             INTO v_r_count, v_obs_count, v_max_pct
             FROM (
                 SELECT 
                     restaurant_id,
-                    COUNT(*)::NUMERIC / NULLIF(COUNT(*) OVER (), 0) AS restaurant_share
+                    COUNT(*) AS cnt,
+                    COUNT(*)::NUMERIC / NULLIF(SUM(COUNT(*)) OVER (), 0) AS restaurant_share
                 FROM benchmark_observations
                 WHERE canonical_item_id = p_canonical_item
                   AND observed_on BETWEEN v_start AND v_end
