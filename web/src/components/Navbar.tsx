@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Scale, Receipt, Sparkles, TrendingUp, CheckCircle2 } from "lucide-react";
+import { Scale, Receipt, Sparkles, TrendingUp } from "lucide-react";
 
 export function Navbar() {
   const pathname = usePathname();
@@ -72,3 +72,4 @@ export function Navbar() {
     </header>
   );
 }
+

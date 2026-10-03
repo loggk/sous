@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, useTransition, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { api, CanonicalItem, BenchmarkData } from "@/lib/api";
-import { Scale, Search, ShieldCheck, AlertCircle, Info, MapPin, Building2, Calendar, HelpCircle } from "lucide-react";
+import { Scale, Search, ShieldCheck, AlertCircle, Info, MapPin, Building2, Calendar } from "lucide-react";
 
 function BenchmarkContent() {
   const searchParams = useSearchParams();
@@ -24,7 +24,6 @@ function BenchmarkContent() {
         const catalog = await api.getCatalogItems("", true);
         setItems(catalog);
         if (!selectedItemId && catalog.length > 0) {
-          // Default to Roma Tomatoes or first item
           const defaultItem = catalog.find((i) => i.name.includes("Roma Tomatoes")) || catalog[0];
           setSelectedItemId(defaultItem.id);
         }
@@ -300,3 +299,4 @@ export default function BenchmarkPage() {
     </Suspense>
   );
 }
+

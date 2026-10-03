@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { api, InvoiceSummary, InvoiceDetail } from "@/lib/api";
-import { UploadCloud, FileText, CheckCircle2, Clock, AlertCircle, ChevronRight, X } from "lucide-react";
+import { UploadCloud, FileText, CheckCircle2, Clock, ChevronRight, X } from "lucide-react";
 
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<InvoiceSummary[]>([]);
@@ -285,3 +285,4 @@ export default function InvoicesPage() {
     </div>
   );
 }
+

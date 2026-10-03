@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { api, ReviewItem, CanonicalItem } from "@/lib/api";
-import { Sparkles, Check, X, Keyboard, Search, CheckCircle2, ArrowRight } from "lucide-react";
+import { Sparkles, X, Keyboard, Search, CheckCircle2, ArrowRight } from "lucide-react";
 
 export default function ReviewPage() {
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
@@ -45,7 +45,6 @@ export default function ReviewPage() {
   // Auto-focus search input when navigating items
   useEffect(() => {
     if (currentItem) {
-      // Suggest closest match or search query based on raw description
       const desc = currentItem.payload?.raw_description || "";
       const tokens = desc.split(" ")[0];
       setSearchQuery(tokens);
@@ -60,7 +59,6 @@ export default function ReviewPage() {
   // Global Keyboard shortcuts: Enter to resolve, 'd' to dismiss
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      // Ignore if typing in text input
       if (document.activeElement?.tagName === "INPUT" && e.key !== "Enter") {
         return;
       }
@@ -90,7 +88,6 @@ export default function ReviewPage() {
         packMeasure
       );
 
-      // Advance queue
       const nextReviews = reviews.filter((r) => r.id !== currentItem.id);
       setReviews(nextReviews);
       if (currentIndex >= nextReviews.length) {
@@ -310,3 +307,4 @@ export default function ReviewPage() {
     </div>
   );
 }
+
