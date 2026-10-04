@@ -119,6 +119,23 @@ class Invoice(Base):
     supplier: Mapped["Supplier"] = relationship("Supplier", back_populates="invoices")
     lines: Mapped[List["InvoiceLine"]] = relationship("InvoiceLine", back_populates="invoice", cascade="all, delete-orphan")
 
+    @property
+    def file_name(self) -> Optional[str]:
+        if self.document and self.document.storage_key:
+            import os
+            basename = os.path.basename(self.document.storage_key)
+            if "_" in basename:
+                parts = basename.split("_", 1)
+                return parts[1]
+            return f"{self.invoice_number}.pdf"
+        return f"{self.invoice_number}.pdf"
+
+    @property
+    def supplier_name(self) -> Optional[str]:
+        if self.supplier:
+            return self.supplier.canonical_name
+        return None
+
 
 class CanonicalItem(Base):
     __tablename__ = "canonical_items"

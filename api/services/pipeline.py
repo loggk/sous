@@ -1,3 +1,5 @@
+import os
+import zlib
 import re
 import uuid
 import hashlib
@@ -157,6 +159,173 @@ def validate_arithmetic(
     return (len(errors) == 0), errors
 
 
+def extract_invoice_from_pdf(file_path: str) -> Optional[Dict[str, Any]]:
+    """
+    Direct digital PDF stream extractor for distributor delivery receipts (e.g. Sysco GTA).
+    Decodes ASCII85 and Flate streams, extracts exact text tokens, and structures
+    the invoice header, lines, and arithmetic totals.
+    """
+    if not file_path or not os.path.exists(file_path):
+        return None
+
+    try:
+        with open(file_path, "rb") as f:
+            content = f.read()
+
+        try:
+            from reportlab.pdfbase.pdfutils import asciiBase85Decode
+        except ImportError:
+            asciiBase85Decode = None
+
+        pattern = re.compile(rb"<<(.*?)>>\s*stream[\r\n]+(.*?)[\r\n]*endstream", re.DOTALL)
+        all_strings = []
+        for m in pattern.finditer(content):
+            dict_part = m.group(1).decode("latin1", errors="ignore")
+            stream_data = m.group(2)
+            decoded_bytes = stream_data
+            if "ASCII85Decode" in dict_part and asciiBase85Decode:
+                try:
+                    raw_str = stream_data.strip().decode("latin1")
+                    if not raw_str.endswith("~>"):
+                        raw_str += "~>"
+                    res = asciiBase85Decode(raw_str)
+                    decoded_bytes = res if isinstance(res, bytes) else res.encode("latin1")
+                except Exception:
+                    pass
+            if "FlateDecode" in dict_part:
+                try:
+                    decoded_bytes = zlib.decompress(decoded_bytes)
+                except Exception:
+                    try:
+                        decoded_bytes = zlib.decompress(decoded_bytes, -15)
+                    except Exception:
+                        pass
+            stream_text = decoded_bytes.decode("latin1", errors="ignore")
+            matches = re.findall(r"\(((?:[^()\\]|\\.)*)\)\s*Tj", stream_text)
+            for s in matches:
+                cleaned = s.replace(r"\(", "(").replace(r"\)", ")").replace(r"\\", "\\").strip()
+                if cleaned:
+                    all_strings.append(cleaned)
+
+        if not all_strings:
+            return None
+
+        result = {
+            "supplier_name": "Sysco GTA",
+            "invoice_number": None,
+            "invoice_date": date.today(),
+            "delivery_date": None,
+            "subtotal": 0.0,
+            "tax": 0.0,
+            "total": 0.0,
+            "lines": [],
+            "extraction_provider": "pdf_stream_v1"
+        }
+
+        if len(all_strings) > 0 and ("SYSCO" in all_strings[0].upper() or "TORONTO" in all_strings[0].upper()):
+            result["supplier_name"] = "Sysco GTA"
+
+        fees_total = 0.0
+        merchandise_subtotal = 0.0
+
+        i = 0
+        while i < len(all_strings):
+            token = all_strings[i]
+
+            if "Invoice #:" in token and i + 1 < len(all_strings):
+                result["invoice_number"] = all_strings[i+1].strip()
+                i += 2
+                continue
+            elif "Invoice Date:" in token and i + 1 < len(all_strings):
+                raw_date = all_strings[i+1].strip()
+                try:
+                    result["invoice_date"] = datetime.strptime(raw_date, "%b %d, %Y").date()
+                except Exception:
+                    pass
+                i += 2
+                continue
+            elif "Delivery Date:" in token and i + 1 < len(all_strings):
+                raw_date = all_strings[i+1].strip()
+                try:
+                    result["delivery_date"] = datetime.strptime(raw_date, "%b %d, %Y").date()
+                except Exception:
+                    pass
+                i += 2
+                continue
+            elif token == "Extended Total":
+                i += 1
+                while i + 6 < len(all_strings):
+                    ln_token = all_strings[i]
+                    if not ln_token.isdigit():
+                        break
+                    line_idx = int(ln_token)
+                    sku = all_strings[i+1]
+                    desc = all_strings[i+2]
+                    pack = all_strings[i+3]
+                    try:
+                        qty = float(all_strings[i+4])
+                        unit_price = float(all_strings[i+5].replace("$", "").replace(",", ""))
+                        line_total = float(all_strings[i+6].replace("$", "").replace(",", ""))
+                    except ValueError:
+                        break
+
+                    is_fee = "fee" in desc.lower() or "surcharge" in desc.lower() or sku.startswith("SYS-9")
+                    result["lines"].append({
+                        "line_index": line_idx,
+                        "supplier_sku": sku,
+                        "raw_description": desc,
+                        "pack_descriptor": pack,
+                        "quantity": qty,
+                        "unit_price": unit_price,
+                        "line_total": line_total,
+                        "line_kind": "fee" if is_fee else "item"
+                    })
+                    i += 7
+                continue
+            elif "Merchandise Subtotal:" in token and i + 1 < len(all_strings):
+                try:
+                    merchandise_subtotal = float(all_strings[i+1].replace("$", "").replace(",", ""))
+                except ValueError:
+                    pass
+                i += 2
+                continue
+            elif "Fuel Surcharges:" in token and i + 1 < len(all_strings):
+                try:
+                    fees_total = float(all_strings[i+1].replace("$", "").replace(",", ""))
+                except ValueError:
+                    pass
+                i += 2
+                continue
+            elif token.startswith("HST (") and i + 1 < len(all_strings):
+                try:
+                    result["tax"] = float(all_strings[i+1].replace("$", "").replace(",", ""))
+                except ValueError:
+                    pass
+                i += 2
+                continue
+            elif "TOTAL DUE" in token and i + 1 < len(all_strings):
+                try:
+                    result["total"] = float(all_strings[i+1].replace("$", "").replace(",", ""))
+                except ValueError:
+                    pass
+                i += 2
+                continue
+
+            i += 1
+
+        if merchandise_subtotal > 0:
+            result["subtotal"] = round(merchandise_subtotal + fees_total, 2)
+        elif result["lines"]:
+            result["subtotal"] = round(sum(l["line_total"] for l in result["lines"]), 2)
+
+        if result["total"] == 0.0 and result["subtotal"] > 0:
+            result["total"] = round(result["subtotal"] + result["tax"], 2)
+
+        return result
+    except Exception:
+        return None
+
+
 def process_invoice_document(db: Session, document_id: uuid.UUID):
     """
     Background Task: Process uploaded document through extraction, validation, and normalization.
@@ -169,12 +338,68 @@ def process_invoice_document(db: Session, document_id: uuid.UUID):
     db.commit()
 
     try:
-        # 1. Extraction: In prototype Phase 0/1, use supplier or mock payload
-        # Find or create a default broadline distributor (e.g. Sysco GTA)
-        supplier = db.query(Supplier).filter(Supplier.canonical_name == "Sysco GTA").first()
+        # 1. Extraction: Attempt direct PDF stream parsing first, fallback to mock prototype if needed
+        extracted = None
+        if doc.storage_key and (doc.storage_key.lower().endswith(".pdf") or doc.mime == "application/pdf"):
+            extracted = extract_invoice_from_pdf(doc.storage_key)
+
+        if extracted and extracted.get("lines"):
+            supplier_canonical = extracted.get("supplier_name", "Sysco GTA")
+            inv_number = extracted.get("invoice_number") or f"INV-{doc.content_sha256[:8].upper()}"
+            inv_date = extracted.get("invoice_date") or date.today()
+            delivery_date = extracted.get("delivery_date")
+            raw_lines = extracted["lines"]
+            subtotal = extracted["subtotal"]
+            tax = extracted["tax"]
+            total = extracted["total"]
+            provider = extracted.get("extraction_provider", "pdf_stream_v1")
+        else:
+            supplier_canonical = "Sysco GTA"
+            inv_number = f"INV-{doc.content_sha256[:8].upper()}"
+            inv_date = date.today()
+            delivery_date = None
+            raw_lines = [
+                {
+                    "line_index": 1,
+                    "raw_description": "Tomatoes, Roma 20lb CS",
+                    "supplier_sku": "SYS-10492",
+                    "quantity": 2.0,
+                    "pack_descriptor": "20lb",
+                    "unit_price": 38.50,
+                    "line_total": 77.00,
+                    "line_kind": "item",
+                },
+                {
+                    "line_index": 2,
+                    "raw_description": "Canola Oil 16L Pail",
+                    "supplier_sku": "SYS-50211",
+                    "quantity": 1.0,
+                    "pack_descriptor": "16L",
+                    "unit_price": 42.00,
+                    "line_total": 42.00,
+                    "line_kind": "item",
+                },
+                {
+                    "line_index": 3,
+                    "raw_description": "Fuel Surcharge",
+                    "supplier_sku": None,
+                    "quantity": 1.0,
+                    "pack_descriptor": "EA",
+                    "unit_price": 6.50,
+                    "line_total": 6.50,
+                    "line_kind": "fee",
+                },
+            ]
+            subtotal = 125.50
+            tax = 0.00
+            total = 125.50
+            provider = "mock_v1"
+
+        # Find or create distributor
+        supplier = db.query(Supplier).filter(Supplier.canonical_name == supplier_canonical).first()
         if not supplier:
             supplier = Supplier(
-                canonical_name="Sysco GTA",
+                canonical_name=supplier_canonical,
                 aliases=["Sysco", "Sysco Toronto", "Sysco Central Ontario"],
                 is_broadline=True
             )
@@ -182,7 +407,6 @@ def process_invoice_document(db: Session, document_id: uuid.UUID):
             db.flush()
 
         # Check for logical duplicate: same supplier + invoice_number + restaurant
-        inv_number = f"INV-{doc.content_sha256[:8].upper()}"
         existing_invoice = db.query(Invoice).filter(
             Invoice.restaurant_id == doc.restaurant_id,
             Invoice.supplier_id == supplier.id,
@@ -194,46 +418,8 @@ def process_invoice_document(db: Session, document_id: uuid.UUID):
             db.commit()
             return
 
-        # Sample mock line data representing standard broadline food items
-        mock_raw_lines = [
-            {
-                "line_index": 1,
-                "raw_description": "Tomatoes, Roma 20lb CS",
-                "supplier_sku": "SYS-10492",
-                "quantity": 2.0,
-                "pack_descriptor": "20lb",
-                "unit_price": 38.50,
-                "line_total": 77.00,
-                "line_kind": "item",
-            },
-            {
-                "line_index": 2,
-                "raw_description": "Canola Oil 16L Pail",
-                "supplier_sku": "SYS-50211",
-                "quantity": 1.0,
-                "pack_descriptor": "16L",
-                "unit_price": 42.00,
-                "line_total": 42.00,
-                "line_kind": "item",
-            },
-            {
-                "line_index": 3,
-                "raw_description": "Fuel Surcharge",
-                "supplier_sku": None,
-                "quantity": 1.0,
-                "pack_descriptor": "EA",
-                "unit_price": 6.50,
-                "line_total": 6.50,
-                "line_kind": "fee",
-            },
-        ]
-
-        subtotal = 125.50
-        tax = 0.00  # Groceries zero-rated
-        total = 125.50
-
         # 2. Arithmetic validation pass
-        is_valid, validation_errors = validate_arithmetic(mock_raw_lines, subtotal, tax, total)
+        is_valid, validation_errors = validate_arithmetic(raw_lines, subtotal, tax, total)
         validation_status = "passed" if is_valid else "review_needed"
 
         invoice = Invoice(
@@ -241,11 +427,12 @@ def process_invoice_document(db: Session, document_id: uuid.UUID):
             restaurant_id=doc.restaurant_id,
             supplier_id=supplier.id,
             invoice_number=inv_number,
-            invoice_date=date.today(),
+            invoice_date=inv_date,
+            delivery_date=delivery_date,
             subtotal=subtotal,
             tax=tax,
             total=total,
-            extraction_provider="mock_v1",
+            extraction_provider=provider,
             extraction_version="1.0",
             validation_status=validation_status,
         )
@@ -265,14 +452,14 @@ def process_invoice_document(db: Session, document_id: uuid.UUID):
         restaurant = db.query(Restaurant).filter(Restaurant.id == doc.restaurant_id).first()
 
         # 3. Normalization and Unit Economics
-        for raw in mock_raw_lines:
+        for raw in raw_lines:
             units, size, measure = parse_pack_descriptor(raw.get("pack_descriptor"))
             line_kind = raw.get("line_kind", "item")
 
             canonical_id = None
             price_per_base = None
 
-            # Normalization lookup in sku_mappings cache
+            # Normalization lookup in sku_mappings cache or canonical items
             if raw.get("supplier_sku") and line_kind == "item":
                 cached = db.query(SkuMapping).filter(
                     SkuMapping.supplier_id == supplier.id,
@@ -281,9 +468,34 @@ def process_invoice_document(db: Session, document_id: uuid.UUID):
 
                 if cached:
                     canonical_id = cached.canonical_item_id
+                else:
+                    # Smart keyword matching against canonical items
+                    desc_lower = raw["raw_description"].lower()
+                    matched_item = None
+                    for kw in ["roma", "canola", "mozzarella", "flour", "pepperoni", "tomato"]:
+                        if kw in desc_lower:
+                            matched_item = db.query(CanonicalItem).filter(
+                                CanonicalItem.name.ilike(f"%{kw}%")
+                            ).first()
+                            if matched_item:
+                                break
+                    if matched_item:
+                        canonical_id = matched_item.id
+                        # Seed into sku_mappings cache for deterministic future resolution
+                        db.add(SkuMapping(
+                            supplier_id=supplier.id,
+                            supplier_sku=raw["supplier_sku"],
+                            canonical_item_id=matched_item.id,
+                            pack_units=units or 1,
+                            pack_size=size,
+                            pack_measure=measure or matched_item.base_unit
+                        ))
+                        db.flush()
+
+                if canonical_id:
                     c_item = db.query(CanonicalItem).filter(CanonicalItem.id == canonical_id).first()
                     if c_item and units and size:
-                        total_units = raw["quantity"] * units * convert_to_base_unit(size, measure, c_item.base_unit)
+                        total_units = raw["quantity"] * units * convert_to_base_unit(size, measure or c_item.base_unit, c_item.base_unit)
                         if total_units > 0:
                             price_per_base = round(raw["line_total"] / total_units, 4)
 

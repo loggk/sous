@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { api, InvoiceSummary, InvoiceDetail } from "@/lib/api";
-import { UploadCloud, FileText, CheckCircle2, Clock, ChevronRight, X } from "lucide-react";
+import { UploadCloud, FileText, CheckCircle2, Clock, ChevronRight, X, Trash2 } from "lucide-react";
 
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<InvoiceSummary[]>([]);
@@ -40,16 +40,19 @@ export default function InvoicesPage() {
       if (res.message.includes("Duplicate")) {
         setUploadStatus({
           type: "warning",
-          message: `Duplicate document detected (SHA-256: ${res.content_sha256.slice(0, 12)}...). Existing record retrieved.`,
+          message: `Duplicate document detected for "${file.name}" (SHA-256: ${res.content_sha256.slice(0, 10)}...). Existing record retrieved.`,
         });
       } else {
         setUploadStatus({
           type: "success",
-          message: `Invoice uploaded successfully! Background extraction running for ${file.name}.`,
+          message: `Invoice "${file.name}" uploaded successfully! Background extraction running...`,
         });
       }
 
       await loadInvoices();
+      // Poll automatically so background extraction updates the table as soon as completed
+      setTimeout(() => loadInvoices(), 1500);
+      setTimeout(() => loadInvoices(), 3500);
     } catch (err: any) {
       setUploadStatus({
         type: "error",
@@ -67,6 +70,28 @@ export default function InvoicesPage() {
       setSelectedInvoice(detail);
     } catch (err: any) {
       alert("Failed to load invoice details: " + err.message);
+    }
+  }
+
+  async function handleDeleteInvoice(invoiceId: string, name: string) {
+    if (!confirm(`Are you sure you want to delete "${name}"?\n\nThis will remove the invoice, lines, and document record, resetting duplicate detection so you can re-upload cleanly.`)) {
+      return;
+    }
+    try {
+      await api.deleteInvoice(invoiceId);
+      setUploadStatus({
+        type: "success",
+        message: `Deleted "${name}" and reset its document record successfully.`,
+      });
+      if (selectedInvoice?.id === invoiceId) {
+        setSelectedInvoice(null);
+      }
+      await loadInvoices();
+    } catch (err: any) {
+      setUploadStatus({
+        type: "error",
+        message: err.message || "Failed to delete invoice.",
+      });
     }
   }
 
@@ -152,7 +177,7 @@ export default function InvoicesPage() {
             <table className="w-full text-left text-sm">
               <thead className="bg-zinc-50/70 border-b border-zinc-200 text-xs font-medium text-zinc-500 dark:bg-zinc-800/40 dark:border-zinc-800">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Invoice Number</th>
+                  <th className="px-4 py-3 font-medium">Document / Invoice</th>
                   <th className="px-4 py-3 font-medium">Invoice Date</th>
                   <th className="px-4 py-3 font-medium">Validation Status</th>
                   <th className="px-4 py-3 font-medium text-right">Subtotal</th>
@@ -167,9 +192,26 @@ export default function InvoicesPage() {
                     onClick={() => openInvoiceModal(inv.id)}
                     className="cursor-pointer hover:bg-zinc-50/60 dark:hover:bg-zinc-800/40 transition-colors"
                   >
-                    <td className="px-4 py-3.5 font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-zinc-400" />
-                      {inv.invoice_number}
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-50 text-orange-600 dark:bg-orange-950/50 dark:text-orange-400">
+                          <FileText className="h-5 w-5" />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+                            {inv.file_name || inv.invoice_number}
+                          </span>
+                          <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+                            <span className="font-mono text-[11px] font-medium">{inv.invoice_number}</span>
+                            {inv.supplier_name && (
+                              <>
+                                <span>&bull;</span>
+                                <span className="truncate">{inv.supplier_name}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </td>
                     <td className="px-4 py-3.5 text-zinc-600 dark:text-zinc-400">
                       {inv.invoice_date}
@@ -197,7 +239,19 @@ export default function InvoicesPage() {
                       ${inv.total.toFixed(2)}
                     </td>
                     <td className="px-4 py-3.5 text-right">
-                      <ChevronRight className="h-4 w-4 text-zinc-400 ml-auto" />
+                      <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => handleDeleteInvoice(inv.id, inv.file_name || inv.invoice_number)}
+                          title="Delete invoice & document"
+                          className="rounded-lg p-1.5 text-zinc-400 hover:bg-red-50 hover:text-red-600 transition-colors dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                        <ChevronRight
+                          onClick={() => openInvoiceModal(inv.id)}
+                          className="h-4 w-4 text-zinc-400 hover:text-zinc-600 cursor-pointer"
+                        />
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -214,10 +268,13 @@ export default function InvoicesPage() {
             <div className="flex items-center justify-between border-b border-zinc-200 p-5 dark:border-zinc-800">
               <div>
                 <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
-                  {selectedInvoice.invoice_number}
+                  {selectedInvoice.file_name || selectedInvoice.invoice_number}
                 </h3>
                 <p className="text-xs text-zinc-500">
-                  Date: {selectedInvoice.invoice_date} | Extraction: {selectedInvoice.extraction_provider}
+                  Invoice #: <span className="font-mono font-medium">{selectedInvoice.invoice_number}</span>
+                  {selectedInvoice.supplier_name && ` | Supplier: ${selectedInvoice.supplier_name}`}
+                  {` | Date: ${selectedInvoice.invoice_date}`}
+                  {selectedInvoice.extraction_provider && ` | Provider: ${selectedInvoice.extraction_provider}`}
                 </p>
               </div>
               <button
@@ -268,10 +325,19 @@ export default function InvoicesPage() {
               </table>
             </div>
 
-            <div className="border-t border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-800/50 flex justify-between items-center text-sm">
-              <span className="text-xs text-zinc-500">
-                Arithmetic Validation: {selectedInvoice.validation_status}
-              </span>
+            <div className="border-t border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-800/50 flex flex-wrap justify-between items-center gap-3 text-sm">
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-zinc-500">
+                  Validation: <strong className="text-zinc-700 dark:text-zinc-300">{selectedInvoice.validation_status}</strong>
+                </span>
+                <button
+                  onClick={() => handleDeleteInvoice(selectedInvoice.id, selectedInvoice.file_name || selectedInvoice.invoice_number)}
+                  className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100 transition-colors dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-900/50"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete Invoice & Reset Document
+                </button>
+              </div>
               <div className="flex gap-4 font-mono">
                 <span>Subtotal: ${selectedInvoice.subtotal?.toFixed(2)}</span>
                 <span className="font-bold text-zinc-900 dark:text-zinc-100">

@@ -46,8 +46,10 @@ export interface BenchmarkData {
 export interface InvoiceSummary {
   id: string;
   invoice_number: string;
+  file_name?: string | null;
   invoice_date: string;
   supplier_id: string;
+  supplier_name?: string | null;
   subtotal?: number | null;
   tax?: number | null;
   total: number;
@@ -134,6 +136,17 @@ export const api = {
   async getInvoiceDetail(id: string): Promise<InvoiceDetail> {
     const res = await fetch(`${API_BASE_URL}/invoices/${id}`);
     if (!res.ok) throw new Error("Failed to fetch invoice detail");
+    return res.json();
+  },
+
+  async deleteInvoice(id: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE_URL}/invoices/${id}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Failed to delete invoice" }));
+      throw new Error(err.detail || "Failed to delete invoice");
+    }
     return res.json();
   },
 

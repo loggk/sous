@@ -2,17 +2,17 @@ import uuid
 import os
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks, Header
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select
 
 try:
     from ..database import get_db, SessionLocal
-    from ..models import Document, Invoice, InvoiceLine, Restaurant
+    from ..models import Document, Invoice, InvoiceLine, Restaurant, ReviewItem
     from ..schemas import InvoiceUploadResponse, InvoiceSummaryOut, InvoiceDetailOut, InvoiceLineOut
     from ..services.pipeline import compute_sha256, process_invoice_document
 except (ImportError, ValueError):
     from database import get_db, SessionLocal
-    from models import Document, Invoice, InvoiceLine, Restaurant
+    from models import Document, Invoice, InvoiceLine, Restaurant, ReviewItem
     from schemas import InvoiceUploadResponse, InvoiceSummaryOut, InvoiceDetailOut, InvoiceLineOut
     from services.pipeline import compute_sha256, process_invoice_document
 
@@ -84,6 +84,22 @@ async def upload_invoice(
     # 1. Content Hash Duplicate Detection
     existing_doc = db.query(Document).filter(Document.content_sha256 == content_sha256).first()
     if existing_doc:
+        existing_invoice = db.query(Invoice).filter(Invoice.document_id == existing_doc.id).first()
+        # If invoice was deleted in DB or extracted with prototype mock_v1, re-trigger extraction
+        if not existing_invoice or existing_invoice.extraction_provider == "mock_v1":
+            if existing_invoice:
+                db.delete(existing_invoice)
+                db.commit()
+            existing_doc.status = "pending"
+            db.commit()
+            background_tasks.add_task(run_pipeline_task, existing_doc.id)
+            return InvoiceUploadResponse(
+                document_id=existing_doc.id,
+                content_sha256=content_sha256,
+                status="pending",
+                message="Reprocessing document extraction with PDF stream parser."
+            )
+
         return InvoiceUploadResponse(
             document_id=existing_doc.id,
             content_sha256=content_sha256,
@@ -127,7 +143,13 @@ def list_invoices(
     db: Session = Depends(get_db)
 ):
     """List all invoices for the authenticated restaurant."""
-    invoices = db.query(Invoice).filter(Invoice.restaurant_id == restaurant_id).order_by(Invoice.invoice_date.desc()).all()
+    invoices = (
+        db.query(Invoice)
+        .options(joinedload(Invoice.document), joinedload(Invoice.supplier))
+        .filter(Invoice.restaurant_id == restaurant_id)
+        .order_by(Invoice.invoice_date.desc())
+        .all()
+    )
     return invoices
 
 
@@ -138,6 +160,32 @@ def get_invoice_detail(
     db: Session = Depends(get_db)
 ):
     """Retrieve full invoice details with lines and validation status."""
+    invoice = (
+        db.query(Invoice)
+        .options(joinedload(Invoice.document), joinedload(Invoice.supplier), joinedload(Invoice.lines))
+        .filter(
+            Invoice.id == invoice_id,
+            Invoice.restaurant_id == restaurant_id
+        )
+        .first()
+    )
+
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    return invoice
+
+
+@router.delete("/{invoice_id}")
+def delete_invoice(
+    invoice_id: uuid.UUID,
+    restaurant_id: uuid.UUID = Depends(get_current_restaurant_id),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete an invoice and its associated document record (resetting duplicate SHA-256 detection).
+    Also cleans up associated review items.
+    """
     invoice = db.query(Invoice).filter(
         Invoice.id == invoice_id,
         Invoice.restaurant_id == restaurant_id
@@ -146,4 +194,25 @@ def get_invoice_detail(
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
-    return invoice
+    document_id = invoice.document_id
+
+    # 1. Clean up review items pointing to this invoice
+    db.query(ReviewItem).filter(ReviewItem.invoice_id == invoice.id).delete(synchronize_session=False)
+
+    # 2. Delete invoice (cascade deletes lines)
+    db.delete(invoice)
+    db.flush()
+
+    # 3. Clean up associated Document to reset SHA-256 duplicate cache
+    if document_id:
+        doc = db.query(Document).filter(Document.id == document_id).first()
+        if doc:
+            if doc.storage_key and os.path.exists(doc.storage_key):
+                try:
+                    os.remove(doc.storage_key)
+                except Exception:
+                    pass
+            db.delete(doc)
+
+    db.commit()
+    return {"success": True, "message": "Invoice and document record deleted successfully."}

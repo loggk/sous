@@ -38,8 +38,10 @@ class InvoiceSummaryOut(BaseModel):
 
     id: UUID
     invoice_number: str
+    file_name: Optional[str] = None
     invoice_date: date
     supplier_id: UUID
+    supplier_name: Optional[str] = None
     subtotal: Optional[float] = None
     tax: Optional[float] = None
     total: float
