@@ -22,30 +22,10 @@ UPLOAD_STORAGE_DIR = os.getenv("UPLOAD_STORAGE_DIR", "/tmp/sous_uploads")
 os.makedirs(UPLOAD_STORAGE_DIR, exist_ok=True)
 
 
-def get_current_restaurant_id(x_restaurant_id: Optional[str] = Header(None), db: Session = Depends(get_db)) -> uuid.UUID:
-    """Helper to get current restaurant id for multi-tenancy. Falls back to first restaurant in dev."""
-    if x_restaurant_id:
-        try:
-            return uuid.UUID(x_restaurant_id)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid X-Restaurant-ID header")
-
-    # In dev/mock mode, default to the first restaurant in the database or generate one
-    first_restaurant = db.query(Restaurant).first()
-    if first_restaurant:
-        return first_restaurant.id
-
-    # Create a default test restaurant if none exists
-    new_rest = Restaurant(
-        name="Pilot Pizzeria GTA",
-        address="123 Queen St W, Toronto, ON",
-        seats=45,
-        cuisine_type="Pizzeria"
-    )
-    db.add(new_rest)
-    db.commit()
-    db.refresh(new_rest)
-    return new_rest.id
+try:
+    from ..auth import get_current_restaurant_id, get_current_user
+except (ImportError, ValueError):
+    from auth import get_current_restaurant_id, get_current_user
 
 
 def run_pipeline_task(document_id: uuid.UUID):

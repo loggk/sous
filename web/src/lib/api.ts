@@ -91,20 +91,39 @@ export interface ReviewItem {
   } | null;
 }
 
+async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  let token: string | null = null;
+  try {
+    const { createClient } = await import("@/lib/supabase/client");
+    const supabase = createClient();
+    const { data } = await supabase.auth.getSession();
+    token = data.session?.access_token || null;
+  } catch {
+    // Supabase credentials not set or in offline mode
+  }
+
+  const headers = new Headers(options.headers || {});
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  return fetch(url, { ...options, headers });
+}
+
 export const api = {
   async getHealth() {
-    const res = await fetch(`${API_BASE_URL}/health`);
+    const res = await authFetch(`${API_BASE_URL}/health`);
     return res.json();
   },
 
   async getSpendSummary(days = 90): Promise<SpendSummary> {
-    const res = await fetch(`${API_BASE_URL}/audit/spend?days=${days}`);
+    const res = await authFetch(`${API_BASE_URL}/audit/spend?days=${days}`);
     if (!res.ok) throw new Error("Failed to fetch spend summary");
     return res.json();
   },
 
   async getPriceAlerts(): Promise<PriceAlert[]> {
-    const res = await fetch(`${API_BASE_URL}/audit/alerts`);
+    const res = await authFetch(`${API_BASE_URL}/audit/alerts`);
     if (!res.ok) throw new Error("Failed to fetch price alerts");
     return res.json();
   },
@@ -113,13 +132,13 @@ export const api = {
     const params = new URLSearchParams();
     if (query) params.append("q", query);
     if (benchmarkableOnly) params.append("benchmarkable_only", "true");
-    const res = await fetch(`${API_BASE_URL}/catalog/items?${params.toString()}`);
+    const res = await authFetch(`${API_BASE_URL}/catalog/items?${params.toString()}`);
     if (!res.ok) throw new Error("Failed to fetch catalog items");
     return res.json();
   },
 
   async getBenchmark(canonicalItemId: string, windowDays = 90): Promise<BenchmarkData> {
-    const res = await fetch(`${API_BASE_URL}/benchmarks/${canonicalItemId}?window_days=${windowDays}`);
+    const res = await authFetch(`${API_BASE_URL}/benchmarks/${canonicalItemId}?window_days=${windowDays}`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "Failed to fetch benchmark" }));
       throw new Error(err.detail || "Failed to fetch benchmark");
@@ -128,19 +147,19 @@ export const api = {
   },
 
   async getInvoices(): Promise<InvoiceSummary[]> {
-    const res = await fetch(`${API_BASE_URL}/invoices`);
+    const res = await authFetch(`${API_BASE_URL}/invoices`);
     if (!res.ok) throw new Error("Failed to fetch invoices");
     return res.json();
   },
 
   async getInvoiceDetail(id: string): Promise<InvoiceDetail> {
-    const res = await fetch(`${API_BASE_URL}/invoices/${id}`);
+    const res = await authFetch(`${API_BASE_URL}/invoices/${id}`);
     if (!res.ok) throw new Error("Failed to fetch invoice detail");
     return res.json();
   },
 
   async deleteInvoice(id: string): Promise<{ success: boolean; message: string }> {
-    const res = await fetch(`${API_BASE_URL}/invoices/${id}`, {
+    const res = await authFetch(`${API_BASE_URL}/invoices/${id}`, {
       method: "DELETE",
     });
     if (!res.ok) {
@@ -153,7 +172,7 @@ export const api = {
   async uploadInvoice(file: File) {
     const formData = new FormData();
     formData.append("file", file);
-    const res = await fetch(`${API_BASE_URL}/invoices/upload`, {
+    const res = await authFetch(`${API_BASE_URL}/invoices/upload`, {
       method: "POST",
       body: formData,
     });
@@ -165,7 +184,7 @@ export const api = {
   },
 
   async getPendingReviews(): Promise<ReviewItem[]> {
-    const res = await fetch(`${API_BASE_URL}/review`);
+    const res = await authFetch(`${API_BASE_URL}/review`);
     if (!res.ok) throw new Error("Failed to fetch reviews");
     return res.json();
   },
@@ -177,7 +196,7 @@ export const api = {
     packSize?: number,
     packMeasure?: string
   ) {
-    const res = await fetch(`${API_BASE_URL}/review/${reviewId}/resolve`, {
+    const res = await authFetch(`${API_BASE_URL}/review/${reviewId}/resolve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -193,7 +212,7 @@ export const api = {
   },
 
   async dismissReview(reviewId: string) {
-    const res = await fetch(`${API_BASE_URL}/review/${reviewId}/dismiss`, {
+    const res = await authFetch(`${API_BASE_URL}/review/${reviewId}/dismiss`, {
       method: "POST",
     });
     if (!res.ok) throw new Error("Failed to dismiss review item");

@@ -1,11 +1,48 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Scale, Receipt, Sparkles, TrendingUp } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Scale, Receipt, Sparkles, TrendingUp, LogOut, User } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 export function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const supabase = createClient();
+      supabase.auth.getUser().then(({ data }) => {
+        if (data.user?.email) {
+          setUserEmail(data.user.email);
+        }
+      });
+
+      const { data: authListener } = supabase.auth.onAuthStateChange((_, session) => {
+        setUserEmail(session?.user?.email || null);
+      });
+
+      return () => {
+        authListener.subscription.unsubscribe();
+      };
+    } catch {
+      // Supabase credentials not set yet
+    }
+  }, []);
+
+  async function handleSignOut() {
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+      setUserEmail(null);
+      router.push("/login");
+      router.refresh();
+    } catch (err) {
+      console.error(err);
+    }
+  }
 
   const navItems = [
     { name: "Local Benchmarks", href: "/benchmarks", icon: Scale },
@@ -54,19 +91,39 @@ export function Navbar() {
           </nav>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           <div className="hidden sm:flex flex-col text-right">
             <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
-              Queen St Slice Co.
+              {userEmail ? userEmail.split("@")[0] : "Queen St Slice Co."}
             </span>
             <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
-              Toronto, ON (Downtown West)
+              {userEmail ? userEmail : "Toronto, ON (Downtown West)"}
             </span>
           </div>
+
           <div className="flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-400">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
             Live Network
           </div>
+
+          {userEmail ? (
+            <button
+              onClick={handleSignOut}
+              title="Sign Out"
+              className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 cursor-pointer transition-colors"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          ) : (
+            <Link
+              href="/login"
+              title="Sign In"
+              className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-colors"
+            >
+              <User className="h-3.5 w-3.5" />
+              <span>Sign In</span>
+            </Link>
+          )}
         </div>
       </div>
     </header>
