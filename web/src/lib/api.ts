@@ -1,10 +1,22 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+export interface TopCostItem {
+  id: string;
+  name: string;
+  category: string;
+  base_unit: string;
+  total_spend: number;
+  total_qty: number;
+  avg_price: number;
+  pct_of_spend: number;
+}
+
 export interface SpendSummary {
   total_spend: number;
   by_category: Record<string, number>;
   by_supplier: Record<string, number>;
   fees_total: number;
+  top_items?: TopCostItem[];
 }
 
 export interface PriceAlert {
@@ -24,6 +36,17 @@ export interface CanonicalItem {
   category: string;
   base_unit: string;
   benchmarkable: boolean;
+  has_data?: boolean;
+}
+
+export interface BenchmarkSummaryItem extends CanonicalItem {
+  has_data: boolean;
+  suppressed: boolean;
+  n_restaurants?: number;
+  radius_km_used?: number | null;
+  median?: number | null;
+  p25?: number | null;
+  p75?: number | null;
 }
 
 export interface BenchmarkData {
@@ -150,6 +173,19 @@ export const api = {
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "Failed to fetch benchmark" }));
       throw new Error(err.detail || "Failed to fetch benchmark");
+    }
+    return res.json();
+  },
+
+  async getBenchmarkSummary(windowDays = 90): Promise<BenchmarkSummaryItem[]> {
+    const res = await authFetch(`${API_BASE_URL}/benchmarks/summary?window_days=${windowDays}`);
+    if (!res.ok) {
+      const catalog = await this.getCatalogItems("", true);
+      return catalog.map((c) => ({
+        ...c,
+        has_data: false,
+        suppressed: true,
+      }));
     }
     return res.json();
   },

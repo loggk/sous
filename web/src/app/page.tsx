@@ -2,12 +2,26 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { api, SpendSummary, PriceAlert } from "@/lib/api";
-import { AlertTriangle, ArrowUpRight, TrendingUp, DollarSign, Layers, Truck, ShieldAlert } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowUpRight,
+  DollarSign,
+  Truck,
+  ShieldAlert,
+  TrendingUp,
+  Receipt,
+  Scale,
+  CheckCircle2,
+  PieChart
+} from "lucide-react";
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [spend, setSpend] = useState<SpendSummary | null>(null);
   const [alerts, setAlerts] = useState<PriceAlert[]>([]);
+  const [windowDays, setWindowDays] = useState<number>(90);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -15,8 +29,9 @@ export default function DashboardPage() {
     async function loadData() {
       try {
         setLoading(true);
+        setError(null);
         const [spendData, alertsData] = await Promise.all([
-          api.getSpendSummary(90),
+          api.getSpendSummary(windowDays),
           api.getPriceAlerts(),
         ]);
         setSpend(spendData);
@@ -28,14 +43,16 @@ export default function DashboardPage() {
       }
     }
     loadData();
-  }, []);
+  }, [windowDays]);
 
-  if (loading) {
+  const totalAlertImpact = alerts.reduce((acc, curr) => acc + (curr.estimated_dollar_impact || 0), 0);
+
+  if (loading && !spend) {
     return (
       <div className="flex h-96 items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-orange-600 border-t-transparent" />
-          <p className="text-sm text-zinc-500">Loading audit data...</p>
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#2f4a7d] border-t-transparent dark:border-blue-400" />
+          <p className="text-sm text-slate-500 dark:text-slate-400">Auditing invoice spend & detecting price shifts...</p>
         </div>
       </div>
     );
@@ -43,13 +60,13 @@ export default function DashboardPage() {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-red-800 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-800 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
         <h3 className="font-semibold text-lg flex items-center gap-2">
-          <ShieldAlert className="h-5 w-5" /> Connection Error
+          <ShieldAlert className="h-5 w-5" /> Connection Notice
         </h3>
         <p className="mt-2 text-sm">{error}</p>
         <p className="mt-4 text-xs font-mono bg-red-100 dark:bg-red-900/40 p-2 rounded">
-          Make sure the FastAPI backend is running on http://localhost:8000
+          Ensure the FastAPI backend is running on http://localhost:8000
         </p>
       </div>
     );
@@ -57,167 +74,219 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-3xl">
-          Internal Cost Audit
-        </h1>
-        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-          Trailing 90-day invoice spend history, broadline distributor breakdown, and baseline price deviation alerting.
-        </p>
+      {/* Header & Window Controls */}
+      <div className="flex flex-wrap items-end justify-between gap-4 pb-2 border-b border-slate-200/60 dark:border-slate-800">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-[#1b2b4a] dark:text-slate-100 sm:text-3xl">
+            Spend Insights & Audit
+          </h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Direct visibility into your primary food cost drivers, unannounced price increases, and surcharge leaks.
+          </p>
+        </div>
+
+        {/* Rolling Window Selector */}
+        <div className="flex items-center gap-2.5">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Audit Window:</span>
+          <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-[#0e182c]">
+            <button
+              onClick={() => setWindowDays(30)}
+              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                windowDays === 30
+                  ? "bg-[#1b2b4a] text-white shadow-xs dark:bg-blue-600"
+                  : "text-slate-600 hover:text-[#1b2b4a] dark:text-slate-400 dark:hover:text-white"
+              }`}
+            >
+              30 Days
+            </button>
+            <button
+              onClick={() => setWindowDays(90)}
+              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                windowDays === 90
+                  ? "bg-[#1b2b4a] text-white shadow-xs dark:bg-blue-600"
+                  : "text-slate-600 hover:text-[#1b2b4a] dark:text-slate-400 dark:hover:text-white"
+              }`}
+            >
+              90 Days
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+      {/* 3 Executive Financial Scorecards */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+        {/* Total Spend */}
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-[#131f37]">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Total Spend (90d)</span>
-            <div className="rounded-lg bg-orange-50 p-2 text-orange-600 dark:bg-orange-950/50">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              Invoiced Food Spend
+            </span>
+            <div className="rounded-xl bg-[#f0f4fa] p-2.5 text-[#2f4a7d] dark:bg-[#1a2c4e] dark:text-blue-300">
               <DollarSign className="h-4 w-4" />
             </div>
           </div>
-          <div className="mt-3 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
+          <div className="mt-3 text-3xl font-bold tracking-tight tabular-nums text-[#1b2b4a] dark:text-slate-100">
             ${spend?.total_spend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <div className="mt-1 text-xs text-zinc-500">Gross invoiced supplier spend</div>
+          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+            Across all deliveries in the past {windowDays} days
+          </p>
         </div>
 
-        <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+        {/* Audited Surcharges & Fees */}
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-[#131f37]">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Fuel & Service Surcharges</span>
-            <div className="rounded-lg bg-blue-50 p-2 text-blue-600 dark:bg-blue-950/50">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              Surcharges & Drop Fees
+            </span>
+            <div className="rounded-xl bg-[#f0f4fa] p-2.5 text-[#2f4a7d] dark:bg-[#1a2c4e] dark:text-blue-300">
               <Truck className="h-4 w-4" />
             </div>
           </div>
-          <div className="mt-3 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
+          <div className="mt-3 text-3xl font-bold tracking-tight tabular-nums text-[#1b2b4a] dark:text-slate-100">
             ${spend?.fees_total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <div className="mt-1 text-xs text-zinc-500">Separately audited non-item fees</div>
+          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+            {spend && spend.total_spend > 0
+              ? `${((spend.fees_total / spend.total_spend) * 100).toFixed(1)}% of your gross spend goes to fees`
+              : "Fuel surcharges & delivery fees"}
+          </p>
         </div>
 
-        <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+        {/* Active Price Creep Exposure */}
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-[#131f37]">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Active Price Alerts</span>
-            <div className="rounded-lg bg-amber-50 p-2 text-amber-600 dark:bg-amber-950/50">
-              <AlertTriangle className="h-4 w-4" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              Price Creep Exposure
+            </span>
+            <div className={`rounded-xl p-2.5 ${alerts.length > 0 ? "bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400" : "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400"}`}>
+              {alerts.length > 0 ? <AlertTriangle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
             </div>
           </div>
-          <div className="mt-3 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
-            {alerts.length}
+          <div className="mt-3 text-3xl font-bold tracking-tight tabular-nums text-[#1b2b4a] dark:text-slate-100">
+            {alerts.length > 0
+              ? `+$${totalAlertImpact.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+              : "$0.00"}
           </div>
-          <div className="mt-1 text-xs text-zinc-500">Items above trailing baseline median</div>
-        </div>
-
-        <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Market Benchmark Status</span>
-            <div className="rounded-lg bg-emerald-50 p-2 text-emerald-600 dark:bg-emerald-950/50">
-              <Layers className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="mt-3 text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-            Unlocked
-          </div>
-          <div className="mt-1 text-xs text-zinc-500">Contribute-to-consume verified</div>
+          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+            {alerts.length > 0
+              ? `Sum of price jump impacts across ${alerts.length} ingredients`
+              : "All ingredient prices within expected baseline"}
+          </p>
         </div>
       </div>
 
-      {/* Price Alerts Section */}
-      <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="flex items-center justify-between mb-4">
+      {/* Actionable Price Increases & Renegotiation Targets */}
+      <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-[#131f37]">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
           <div>
-            <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-amber-500" /> Price-Change Alerts
+            <h2 className="text-base font-bold text-[#1b2b4a] dark:text-slate-100 flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-500" /> Price-Increase Alerts
             </h2>
-            <p className="text-xs text-zinc-500">
-              Items flagged against your historical trailing median with minimum absolute-dollar-impact filter.
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Ingredients where recent invoice costs jumped above your baseline median. Click any row to view market benchmarks.
             </p>
           </div>
-          <span className="text-xs font-medium text-zinc-500">{alerts.length} items flagged</span>
         </div>
 
         {alerts.length === 0 ? (
-          <div className="py-8 text-center text-sm text-zinc-500">
-            No anomalous price hikes detected above historical baseline medians.
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-8 text-center dark:border-emerald-900/30 dark:bg-emerald-950/10">
+            <CheckCircle2 className="mx-auto h-7 w-7 text-emerald-600 dark:text-emerald-400" />
+            <h3 className="mt-2 text-sm font-bold text-emerald-900 dark:text-emerald-200">
+              No Unwarranted Price Increases Detected
+            </h3>
+            <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400 max-w-md mx-auto">
+              Your broadline supplier prices have remained consistent with your historical contract medians. Newly uploaded invoices are monitored automatically.
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-zinc-200 text-xs font-medium text-zinc-500 dark:border-zinc-800">
+              <thead className="border-b border-slate-100 dark:border-slate-800 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                 <tr>
-                  <th className="pb-3 font-medium">Canonical Item</th>
-                  <th className="pb-3 font-medium">Latest Price</th>
-                  <th className="pb-3 font-medium">Baseline Median</th>
-                  <th className="pb-3 font-medium">Increase</th>
-                  <th className="pb-3 font-medium">Est. Impact</th>
-                  <th className="pb-3 font-medium">Classification</th>
-                  <th className="pb-3 font-medium text-right">Action</th>
+                  <th className="pb-3 font-semibold">Ingredient</th>
+                  <th className="pb-3 font-semibold">Baseline Median</th>
+                  <th className="pb-3 font-semibold">Latest Invoiced</th>
+                  <th className="pb-3 font-semibold">Unit Increase</th>
+                  <th className="pb-3 font-semibold text-right">Cost Impact</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                {alerts.map((alert) => (
-                  <tr key={alert.canonical_item_id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30">
-                    <td className="py-3.5 font-medium text-zinc-900 dark:text-zinc-100">
-                      {alert.item_name}
-                      <span className="ml-2 text-xs text-zinc-400">/{alert.base_unit}</span>
-                    </td>
-                    <td className="py-3.5 text-zinc-700 dark:text-zinc-300 font-mono">
-                      ${alert.latest_price.toFixed(2)}
-                    </td>
-                    <td className="py-3.5 text-zinc-500 dark:text-zinc-400 font-mono">
-                      ${alert.baseline_median.toFixed(2)}
-                    </td>
-                    <td className="py-3.5 font-semibold text-rose-600 dark:text-rose-400">
-                      +{alert.percent_increase.toFixed(1)}%
-                    </td>
-                    <td className="py-3.5 font-medium text-zinc-900 dark:text-zinc-100">
-                      ${alert.estimated_dollar_impact.toFixed(2)}
-                    </td>
-                    <td className="py-3.5">
-                      <span className="inline-flex items-center rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-950/40 dark:text-amber-400">
-                        {alert.classification}
-                      </span>
-                    </td>
-                    <td className="py-3.5 text-right">
-                      <Link
-                        href={`/benchmarks?item=${alert.canonical_item_id}`}
-                        className="inline-flex items-center gap-1 text-xs font-semibold text-orange-600 hover:text-orange-700 dark:text-orange-400"
-                      >
-                        Compare Local Benchmark
-                        <ArrowUpRight className="h-3.5 w-3.5" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {alerts.map((alert) => {
+                  const unitDiff = alert.latest_price - alert.baseline_median;
+                  return (
+                    <tr
+                      key={alert.canonical_item_id}
+                      onClick={() => router.push(`/benchmarks?item=${alert.canonical_item_id}`)}
+                      className="group cursor-pointer hover:bg-slate-50 dark:hover:bg-[#1a2c4e]/30 transition-colors"
+                    >
+                      <td className="py-3.5 font-semibold text-[#1b2b4a] dark:text-slate-100">
+                        <div className="flex items-center gap-1.5">
+                          <span>{alert.item_name}</span>
+                          <span className="text-xs text-slate-400 dark:text-slate-500 font-normal">/{alert.base_unit}</span>
+                          <ArrowUpRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-[#2f4a7d] dark:text-slate-600 dark:group-hover:text-blue-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+                        </div>
+                      </td>
+                      <td className="py-3.5 text-slate-500 dark:text-slate-400 font-medium tabular-nums">
+                        ${alert.baseline_median.toFixed(2)}
+                      </td>
+                      <td className="py-3.5 text-slate-700 dark:text-slate-300 font-semibold tabular-nums">
+                        ${alert.latest_price.toFixed(2)}
+                      </td>
+                      <td className="py-3.5 font-semibold text-rose-600 dark:text-rose-400 tabular-nums">
+                        +${unitDiff.toFixed(2)} <span className="text-xs font-normal text-rose-500 dark:text-rose-400">({alert.percent_increase.toFixed(1)}%)</span>
+                      </td>
+                      <td className="py-3.5 text-right font-bold text-[#1b2b4a] dark:text-slate-100 tabular-nums">
+                        +${alert.estimated_dollar_impact.toFixed(2)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
+              <tfoot>
+                <tr className="border-t border-slate-200 dark:border-slate-800 font-semibold text-xs text-slate-600 dark:text-slate-400">
+                  <td colSpan={4} className="pt-3.5 text-right font-medium">
+                    Total Price Creep Exposure:
+                  </td>
+                  <td className="pt-3.5 text-right font-bold text-sm text-[#1b2b4a] dark:text-slate-100 tabular-nums">
+                    +${totalAlertImpact.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}
       </div>
 
-      {/* Spend Breakdown Grid */}
+      {/* Two-Column Strategic Breakdown: Spend Categories & Top Cost Drivers */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* By Category */}
-        <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50 mb-1">
-            Spend by Category
-          </h2>
-          <p className="text-xs text-zinc-500 mb-4">Normalized commodity ingredients spend</p>
-          <div className="space-y-3">
+        {/* Left: Spend by Category */}
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-[#131f37]">
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="text-base font-bold text-[#1b2b4a] dark:text-slate-100">
+              Spend by Category
+            </h2>
+            <PieChart className="h-4 w-4 text-slate-400" />
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-5">
+            Distribution of food budget across commodity departments
+          </p>
+
+          <div className="space-y-4">
             {spend &&
               Object.entries(spend.by_category).map(([cat, amount]) => {
                 const pct = spend.total_spend > 0 ? (amount / spend.total_spend) * 100 : 0;
                 return (
-                  <div key={cat} className="space-y-1">
+                  <div key={cat} className="space-y-1.5">
                     <div className="flex justify-between text-xs font-medium">
-                      <span className="capitalize text-zinc-700 dark:text-zinc-300">{cat.replace("_", " ")}</span>
-                      <span className="text-zinc-900 dark:text-zinc-100 font-mono">
+                      <span className="capitalize text-slate-700 dark:text-slate-300 font-semibold">{cat.replace("_", " ")}</span>
+                      <span className="text-[#1b2b4a] dark:text-slate-100 font-semibold tabular-nums">
                         ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
-                        <span className="text-zinc-400">({pct.toFixed(0)}%)</span>
+                        <span className="text-slate-400 dark:text-slate-500 font-normal">({pct.toFixed(0)}%)</span>
                       </span>
                     </div>
-                    <div className="h-2 w-full rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
-                      <div className="h-full bg-orange-600 rounded-full" style={{ width: `${pct}%` }} />
+                    <div className="h-2.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                      <div className="h-full bg-[#2f4a7d] dark:bg-blue-500 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
                     </div>
                   </div>
                 );
@@ -225,32 +294,97 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* By Supplier */}
-        <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
-          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50 mb-1">
-            Spend by Supplier
-          </h2>
-          <p className="text-xs text-zinc-500 mb-4">Broadline distributor concentration</p>
-          <div className="space-y-3">
-            {spend &&
-              Object.entries(spend.by_supplier).map(([sup, amount]) => {
-                const pct = spend.total_spend > 0 ? (amount / spend.total_spend) * 100 : 0;
-                return (
-                  <div key={sup} className="space-y-1">
-                    <div className="flex justify-between text-xs font-medium">
-                      <span className="text-zinc-700 dark:text-zinc-300">{sup}</span>
-                      <span className="text-zinc-900 dark:text-zinc-100 font-mono">
-                        ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
-                        <span className="text-zinc-400">({pct.toFixed(0)}%)</span>
+        {/* Right: Top Cost Drivers (Where the money actually goes!) */}
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-[#131f37]">
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="text-base font-bold text-[#1b2b4a] dark:text-slate-100">
+              Top Cost-Driver Ingredients
+            </h2>
+            <TrendingUp className="h-4 w-4 text-slate-400" />
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-5">
+            Your highest expenditure ingredients and their share of food cost
+          </p>
+
+          <div className="space-y-3.5">
+            {spend?.top_items && spend.top_items.length > 0 ? (
+              spend.top_items.map((item) => (
+                <div
+                  key={item.id}
+                  onClick={() => router.push(`/benchmarks?item=${item.id}`)}
+                  className="group cursor-pointer flex items-center justify-between rounded-xl border border-slate-100 bg-[#f8fafc] p-3 text-xs dark:border-slate-800 dark:bg-[#0e182c]/80 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-[#142340] transition-colors"
+                >
+                  <div className="min-w-0 flex-1 pr-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-[#1b2b4a] dark:text-slate-100 truncate">
+                        {item.name}
+                      </span>
+                      <span className="rounded bg-slate-200/70 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 dark:text-slate-400 uppercase shrink-0">
+                        {item.category}
                       </span>
                     </div>
-                    <div className="h-2 w-full rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
-                      <div className="h-full bg-blue-600 rounded-full" style={{ width: `${pct}%` }} />
+                    <div className="mt-1 text-slate-500 dark:text-slate-400 flex items-center gap-2 tabular-nums text-[11px]">
+                      <span>Avg: ${item.avg_price.toFixed(2)}/{item.base_unit}</span>
+                      <span>&bull;</span>
+                      <span>Qty: {item.total_qty.toLocaleString()} {item.base_unit}</span>
                     </div>
                   </div>
-                );
-              })}
+
+                  <div className="flex items-center gap-3 shrink-0">
+                    <div className="text-right">
+                      <div className="font-bold text-[#1b2b4a] dark:text-slate-100 tabular-nums">
+                        ${item.total_spend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <div className="text-[10px] text-slate-400 dark:text-slate-500 tabular-nums">
+                        {item.pct_of_spend}% of spend
+                      </div>
+                    </div>
+                    <div className="rounded-lg p-1 text-slate-300 group-hover:text-[#2f4a7d] dark:text-slate-600 dark:group-hover:text-blue-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all">
+                      <ArrowUpRight className="h-4 w-4" />
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="py-8 text-center text-xs text-slate-400">
+                Top cost drivers will populate automatically as invoices are processed.
+              </div>
+            )}
           </div>
+        </div>
+      </div>
+
+      {/* Surcharge Leakage & Delivery Optimization Banner */}
+      <div className="rounded-2xl border border-blue-200/60 bg-[#f6f8fc] p-5 dark:border-blue-900/40 dark:bg-[#162544] flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-start gap-3 max-w-2xl">
+          <div className="rounded-xl bg-[#f0f4fa] p-2 text-[#2f4a7d] dark:bg-[#1a2c4e] dark:text-blue-300 shrink-0 mt-0.5">
+            <Truck className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-[#1b2b4a] dark:text-slate-100">
+              Distributor Fee & Surcharge Optimization
+            </h3>
+            <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+              Broadline distributors charge per-delivery fuel surcharges and minimum split-case fees. Consolidating delivery orders from 3 weekly drops down to 2 can save an estimated <strong>$200–$350/month</strong> in pure recurring non-food overhead.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Link
+            href="/invoices"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[#1b2b4a] px-4 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-[#2f4a7d] dark:bg-blue-600 dark:hover:bg-blue-500 transition-colors"
+          >
+            <Receipt className="h-3.5 w-3.5" />
+            <span>Upload Invoices</span>
+          </Link>
+          <Link
+            href="/benchmarks"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-[#1b2b4a] shadow-2xs hover:bg-slate-50 dark:border-slate-700 dark:bg-[#131f37] dark:text-slate-100 dark:hover:bg-[#1a2c4e] transition-colors"
+          >
+            <Scale className="h-3.5 w-3.5" />
+            <span>Market Benchmarks</span>
+          </Link>
         </div>
       </div>
     </div>

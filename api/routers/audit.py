@@ -71,11 +71,46 @@ def get_spend_summary(
     )
     fees_total = float(fee_total_row or 0.0)
 
+    # 5. Top Cost Driver Items (Key ingredients driving the food budget)
+    top_items_rows = (
+        db.query(
+            CanonicalItem.id,
+            CanonicalItem.name,
+            CanonicalItem.category,
+            CanonicalItem.base_unit,
+            func.sum(InvoiceLine.line_total).label("item_spend"),
+            func.sum(InvoiceLine.quantity).label("item_qty"),
+            func.avg(InvoiceLine.price_per_base_unit).label("avg_price")
+        )
+        .join(CanonicalItem, InvoiceLine.canonical_item_id == CanonicalItem.id)
+        .join(Invoice, InvoiceLine.invoice_id == Invoice.id)
+        .filter(Invoice.restaurant_id == restaurant_id, Invoice.invoice_date >= start_date)
+        .group_by(CanonicalItem.id, CanonicalItem.name, CanonicalItem.category, CanonicalItem.base_unit)
+        .order_by(desc("item_spend"))
+        .limit(6)
+        .all()
+    )
+
+    top_items = [
+        {
+            "id": row.id,
+            "name": row.name,
+            "category": row.category,
+            "base_unit": row.base_unit,
+            "total_spend": round(float(row.item_spend), 2),
+            "total_qty": round(float(row.item_qty), 1),
+            "avg_price": round(float(row.avg_price or 0.0), 2),
+            "pct_of_spend": round((float(row.item_spend) / total_spend * 100) if total_spend > 0 else 0.0, 1),
+        }
+        for row in top_items_rows
+    ]
+
     return SpendSummaryOut(
         total_spend=total_spend,
         by_category=by_category,
         by_supplier=by_supplier,
-        fees_total=fees_total
+        fees_total=fees_total,
+        top_items=top_items
     )
 
 

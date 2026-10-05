@@ -93,6 +93,20 @@ class BenchmarkResponse(BaseModel):
     )
 
 
+class BenchmarkSummaryItem(BaseModel):
+    id: UUID
+    name: str
+    category: str
+    base_unit: str
+    has_data: bool
+    suppressed: bool
+    n_restaurants: int = 0
+    radius_km_used: Optional[int] = None
+    median: Optional[float] = None
+    p25: Optional[float] = None
+    p75: Optional[float] = None
+
+
 class CanonicalItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
