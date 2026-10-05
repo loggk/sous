@@ -93,10 +93,11 @@ export interface ReviewItem {
 
 async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
   let token: string | null = null;
+  let supabaseClient: any = null;
   try {
     const { createClient } = await import("@/lib/supabase/client");
-    const supabase = createClient();
-    const { data } = await supabase.auth.getSession();
+    supabaseClient = createClient();
+    const { data } = await supabaseClient.auth.getSession();
     token = data.session?.access_token || null;
   } catch {
     // Supabase credentials not set or in offline mode
@@ -107,7 +108,8 @@ async function authFetch(url: string, options: RequestInit = {}): Promise<Respon
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  return fetch(url, { ...options, headers });
+  const res = await fetch(url, { ...options, headers });
+  return res;
 }
 
 export const api = {
@@ -118,13 +120,19 @@ export const api = {
 
   async getSpendSummary(days = 90): Promise<SpendSummary> {
     const res = await authFetch(`${API_BASE_URL}/audit/spend?days=${days}`);
-    if (!res.ok) throw new Error("Failed to fetch spend summary");
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Failed to fetch spend summary" }));
+      throw new Error(err.detail || "Failed to fetch spend summary");
+    }
     return res.json();
   },
 
   async getPriceAlerts(): Promise<PriceAlert[]> {
     const res = await authFetch(`${API_BASE_URL}/audit/alerts`);
-    if (!res.ok) throw new Error("Failed to fetch price alerts");
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Failed to fetch price alerts" }));
+      throw new Error(err.detail || "Failed to fetch price alerts");
+    }
     return res.json();
   },
 

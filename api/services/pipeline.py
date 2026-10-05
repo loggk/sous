@@ -222,8 +222,14 @@ def extract_invoice_from_pdf(file_path: str) -> Optional[Dict[str, Any]]:
             "extraction_provider": "pdf_stream_v1"
         }
 
-        if len(all_strings) > 0 and ("SYSCO" in all_strings[0].upper() or "TORONTO" in all_strings[0].upper()):
-            result["supplier_name"] = "Sysco GTA"
+        if len(all_strings) > 0:
+            header_peek = " ".join(all_strings[:6]).upper()
+            if "GORDON" in header_peek or "GFS" in header_peek:
+                result["supplier_name"] = "Gordon Food Service (GFS)"
+            elif "FLANAGAN" in header_peek:
+                result["supplier_name"] = "Flanagan Foodservice"
+            elif "SYSCO" in header_peek or "TORONTO" in header_peek:
+                result["supplier_name"] = "Sysco GTA"
 
         fees_total = 0.0
         merchandise_subtotal = 0.0
@@ -269,7 +275,13 @@ def extract_invoice_from_pdf(file_path: str) -> Optional[Dict[str, Any]]:
                     except ValueError:
                         break
 
-                    is_fee = "fee" in desc.lower() or "surcharge" in desc.lower() or sku.startswith("SYS-9")
+                    is_fee = (
+                        "fee" in desc.lower()
+                        or "surcharge" in desc.lower()
+                        or sku.startswith("SYS-9")
+                        or sku.startswith("GFS-9")
+                        or sku.startswith("FLA-9")
+                    )
                     result["lines"].append({
                         "line_index": line_idx,
                         "supplier_sku": sku,

@@ -26,8 +26,7 @@ try:
     from ..auth import get_current_restaurant_id, get_current_user
 except (ImportError, ValueError):
     from auth import get_current_restaurant_id, get_current_user
-
-
+    
 def run_pipeline_task(document_id: uuid.UUID):
     """Background task runner that manages its own DB session."""
     db = SessionLocal()
