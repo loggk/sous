@@ -472,11 +472,13 @@ def process_invoice_document(db: Session, document_id: uuid.UUID):
             price_per_base = None
 
             # Normalization lookup in sku_mappings cache or canonical items
-            if raw.get("supplier_sku") and line_kind == "item":
-                cached = db.query(SkuMapping).filter(
-                    SkuMapping.supplier_id == supplier.id,
-                    SkuMapping.supplier_sku == raw["supplier_sku"]
-                ).first()
+            if line_kind == "item":
+                cached = None
+                if raw.get("supplier_sku"):
+                    cached = db.query(SkuMapping).filter(
+                        SkuMapping.supplier_id == supplier.id,
+                        SkuMapping.supplier_sku == raw["supplier_sku"]
+                    ).first()
 
                 if cached:
                     canonical_id = cached.canonical_item_id
@@ -484,7 +486,14 @@ def process_invoice_document(db: Session, document_id: uuid.UUID):
                     # Smart keyword matching against canonical items
                     desc_lower = raw["raw_description"].lower()
                     matched_item = None
-                    for kw in ["roma", "canola", "mozzarella", "flour", "pepperoni", "tomato"]:
+                    keywords = [
+                        "roma", "canola", "mozzarella", "flour", "pepperoni", "tomato",
+                        "potato", "onion", "garlic", "lettuce", "basil", "butter", 
+                        "cream", "parmigiano", "pecorino", "sugar", "salt", "egg", 
+                        "chicken", "bacon", "olive oil", "yeast", "scallion", "mushroom",
+                        "cheddar", "beef", "pork", "milk", "cheese"
+                    ]
+                    for kw in keywords:
                         if kw in desc_lower:
                             matched_item = db.query(CanonicalItem).filter(
                                 CanonicalItem.name.ilike(f"%{kw}%")
@@ -493,16 +502,18 @@ def process_invoice_document(db: Session, document_id: uuid.UUID):
                                 break
                     if matched_item:
                         canonical_id = matched_item.id
-                        # Seed into sku_mappings cache for deterministic future resolution
-                        db.add(SkuMapping(
-                            supplier_id=supplier.id,
-                            supplier_sku=raw["supplier_sku"],
-                            canonical_item_id=matched_item.id,
-                            pack_units=units or 1,
-                            pack_size=size,
-                            pack_measure=measure or matched_item.base_unit
-                        ))
-                        db.flush()
+                        if raw.get("supplier_sku"):
+                            # Seed into sku_mappings cache for deterministic future resolution
+                            db.add(SkuMapping(
+                                supplier_id=supplier.id,
+                                supplier_sku=raw["supplier_sku"],
+                                canonical_item_id=matched_item.id,
+                                pack_units=units or 1,
+                                pack_size=size,
+                                pack_measure=measure or matched_item.base_unit
+                            ))
+                            db.flush()
+
 
                 if canonical_id:
                     c_item = db.query(CanonicalItem).filter(CanonicalItem.id == canonical_id).first()

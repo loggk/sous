@@ -1,7 +1,7 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export interface TopCostItem {
-  id: string;
+  id?: string | null;
   name: string;
   category: string;
   base_unit: string;

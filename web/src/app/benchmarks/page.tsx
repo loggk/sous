@@ -171,7 +171,7 @@ function BenchmarkContent() {
               </div>
             </div>
 
-            <div className="max-h-[520px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 pr-1">
+            <div className="max-h-[375px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 pr-1">
               {filteredItems.length === 0 ? (
                 <div className="py-12 px-4 text-center">
                   <p className="text-xs text-slate-500 dark:text-slate-400">

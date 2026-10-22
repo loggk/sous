@@ -306,85 +306,53 @@ export default function DashboardPage() {
             Your highest expenditure ingredients and their share of food cost
           </p>
 
-          <div className="space-y-3.5">
+          <div className="space-y-4">
             {spend?.top_items && spend.top_items.length > 0 ? (
-              spend.top_items.map((item) => (
-                <div
-                  key={item.id}
-                  onClick={() => router.push(`/benchmarks?item=${item.id}`)}
-                  className="group cursor-pointer flex items-center justify-between rounded-xl border border-slate-100 bg-[#f8fafc] p-3 text-xs dark:border-slate-800 dark:bg-[#0e182c]/80 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-[#142340] transition-colors"
-                >
-                  <div className="min-w-0 flex-1 pr-3">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-[#1b2b4a] dark:text-slate-100 truncate">
-                        {item.name}
-                      </span>
-                      <span className="rounded bg-slate-200/70 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 dark:text-slate-400 uppercase shrink-0">
-                        {item.category}
+              spend.top_items.slice(0, 5).map((item) => {
+                const pct = item.pct_of_spend;
+                return (
+                  <div
+                    key={item.id || item.name}
+                    onClick={() => item.id ? router.push(`/benchmarks?item=${item.id}`) : router.push("/review")}
+                    className="group cursor-pointer space-y-1.5"
+                    title={
+                      item.id
+                        ? `${item.name}: $${item.total_spend.toFixed(2)} (${pct.toFixed(1)}% of food spend) • Click to view benchmarks`
+                        : `${item.name}: $${item.total_spend.toFixed(2)} (${pct.toFixed(1)}% of food spend) • Click to map in review`
+                    }
+                  >
+                    <div className="flex justify-between items-center text-xs font-medium">
+                      <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                        <span className="text-slate-700 dark:text-slate-300 font-semibold truncate group-hover:text-[#2f4a7d] dark:group-hover:text-blue-400 transition-colors">
+                          {item.name}
+                        </span>
+                        {item.category === "Unmapped" && (
+                          <span className="rounded bg-amber-100 dark:bg-amber-950/60 px-1.5 py-0.2 text-[9px] font-semibold text-amber-800 dark:text-amber-300 uppercase shrink-0">
+                            Review
+                          </span>
+                        )}
+                        <ArrowUpRight className="h-3 w-3 text-slate-400 group-hover:text-[#2f4a7d] dark:group-hover:text-blue-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                      <span className="text-[#1b2b4a] dark:text-slate-100 font-semibold tabular-nums shrink-0">
+                        ${item.total_spend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
+                        <span className="text-slate-400 dark:text-slate-500 font-normal">({pct.toFixed(0)}%)</span>
                       </span>
                     </div>
-                    <div className="mt-1 text-slate-500 dark:text-slate-400 flex items-center gap-2 tabular-nums text-[11px]">
-                      <span>Avg: ${item.avg_price.toFixed(2)}/{item.base_unit}</span>
-                      <span>&bull;</span>
-                      <span>Qty: {item.total_qty.toLocaleString()} {item.base_unit}</span>
+                    <div className="h-2.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                      <div
+                        className="h-full bg-[#2f4a7d] dark:bg-blue-500 rounded-full transition-all duration-500 group-hover:bg-[#1b2b4a] dark:group-hover:bg-blue-400"
+                        style={{ width: `${Math.max(pct, 2)}%` }}
+                      />
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-3 shrink-0">
-                    <div className="text-right">
-                      <div className="font-bold text-[#1b2b4a] dark:text-slate-100 tabular-nums">
-                        ${item.total_spend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </div>
-                      <div className="text-[10px] text-slate-400 dark:text-slate-500 tabular-nums">
-                        {item.pct_of_spend}% of spend
-                      </div>
-                    </div>
-                    <div className="rounded-lg p-1 text-slate-300 group-hover:text-[#2f4a7d] dark:text-slate-600 dark:group-hover:text-blue-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all">
-                      <ArrowUpRight className="h-4 w-4" />
-                    </div>
-                  </div>
-                </div>
-              ))
+                );
+              })
             ) : (
               <div className="py-8 text-center text-xs text-slate-400">
                 Top cost drivers will populate automatically as invoices are processed.
               </div>
             )}
           </div>
-        </div>
-      </div>
-
-      {/* Surcharge Leakage & Delivery Optimization Banner */}
-      <div className="rounded-2xl border border-blue-200/60 bg-[#f6f8fc] p-5 dark:border-blue-900/40 dark:bg-[#162544] flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-start gap-3 max-w-2xl">
-          <div className="rounded-xl bg-[#f0f4fa] p-2 text-[#2f4a7d] dark:bg-[#1a2c4e] dark:text-blue-300 shrink-0 mt-0.5">
-            <Truck className="h-5 w-5" />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-[#1b2b4a] dark:text-slate-100">
-              Distributor Fee & Surcharge Optimization
-            </h3>
-            <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
-              Broadline distributors charge per-delivery fuel surcharges and minimum split-case fees. Consolidating delivery orders from 3 weekly drops down to 2 can save an estimated <strong>$200–$350/month</strong> in pure recurring non-food overhead.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Link
-            href="/invoices"
-            className="inline-flex items-center gap-1.5 rounded-xl bg-[#1b2b4a] px-4 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-[#2f4a7d] dark:bg-blue-600 dark:hover:bg-blue-500 transition-colors"
-          >
-            <Receipt className="h-3.5 w-3.5" />
-            <span>Upload Invoices</span>
-          </Link>
-          <Link
-            href="/benchmarks"
-            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-[#1b2b4a] shadow-2xs hover:bg-slate-50 dark:border-slate-700 dark:bg-[#131f37] dark:text-slate-100 dark:hover:bg-[#1a2c4e] transition-colors"
-          >
-            <Scale className="h-3.5 w-3.5" />
-            <span>Market Benchmarks</span>
-          </Link>
         </div>
       </div>
     </div>

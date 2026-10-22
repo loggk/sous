@@ -117,8 +117,21 @@ class CanonicalItemOut(BaseModel):
     benchmarkable: bool
 
 
+class TopCostItemOut(BaseModel):
+    id: Optional[UUID] = None
+    name: str
+    category: str
+    base_unit: str
+    total_spend: float
+    total_qty: float
+    avg_price: float
+    pct_of_spend: float
+
+
 class SpendSummaryOut(BaseModel):
     total_spend: float
     by_category: Dict[str, float]
     by_supplier: Dict[str, float]
     fees_total: float
+    top_items: List[TopCostItemOut] = []
+

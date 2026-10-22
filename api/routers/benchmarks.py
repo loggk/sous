@@ -70,7 +70,7 @@ def get_benchmarks_summary(
                 b.suppressed,
                 b.n_restaurants,
                 b.radius_km_used,
-                b.median,
+                b.p50 AS median,
                 b.p25,
                 b.p75
             FROM canonical_items c

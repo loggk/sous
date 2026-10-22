@@ -332,6 +332,79 @@ def generate_all():
         "1132.75",
     )
 
+    # Invoice 4: Sysco GTA Italian Pantry & Commodities
+    make_invoice(
+        "test_invoices/04_sysco_san_marzano_pantry.pdf",
+        "SYSCO TORONTO",
+        "Sysco Canada Inc. &bull; Toronto OpCo<br/>21 Progress Ave, Scarborough, ON M1P 2Y7<br/>GST/HST: 104928172 RT0001",
+        "#0f3d64",
+        "SYS-9104822",
+        "Oct 03, 2026",
+        "Oct 04, 2026",
+        "8472910",
+        "<b>Route:</b> 14-DOWNTOWN<br/><b>Stop:</b> 09<br/><b>Driver:</b> M. Kowalski<br/><b>Cases:</b> 15",
+        [
+            ("1", "SYS-50220", "Canned San Marzano Whole Peeled D.O.P.", "6x3kg", "6", "15.60", "93.60"),
+            ("2", "SYS-50215", "Extra Virgin Olive Oil 4x3L Tin", "4x3L", "2", "152.00", "304.00"),
+            ("3", "SYS-50228", "Kosher Salt Coarse 12x1kg", "12x1kg", "3", "13.20", "39.60"),
+            ("4", "SYS-50230", "Granulated White Sugar 20kg Bag", "20kg", "2", "28.00", "56.00"),
+            ("5", "SYS-10475", "Yellow Onions Jumbo 50lb Sack", "50lb", "3", "33.00", "99.00"),
+            ("6", "SYS-90001", "Broadline Delivery Fuel Surcharge", "EA", "1", "8.50", "8.50"),
+        ],
+        "592.20",
+        "8.50",
+        "600.70",
+    )
+
+    # Invoice 5: Gordon Food Service (GFS) Dairy & Poultry Staples
+    make_invoice(
+        "test_invoices/05_gfs_dairy_poultry_staples.pdf",
+        "GORDON FOOD SERVICE",
+        "Gordon Food Service Canada Ltd. &bull; Ontario DC<br/>5555 GFS Way, Milton, ON L9T 6Z5<br/>GST/HST: 123984719 RT0001",
+        "#b81414",
+        "GFS-6284019",
+        "Oct 04, 2026",
+        "Oct 05, 2026",
+        "GFS-91824",
+        "<b>Route:</b> GFS-TOR-4<br/><b>Stop:</b> 14<br/><b>Driver:</b> T. Henderson<br/><b>Cases:</b> 14",
+        [
+            ("1", "GFS-21045", "Mozzarella Shredded 28% MF 4x2.5kg", "4x2.5kg", "4", "118.00", "472.00"),
+            ("2", "GFS-21062", "Butter Unsalted Solid 25kg CS", "25kg", "1", "218.75", "218.75"),
+            ("3", "GFS-21070", "Eggs Large Grade A White 15 Dozen", "180ct", "2", "50.40", "100.80"),
+            ("4", "GFS-21049", "Heavy Whipping Cream 35% 4x4L", "4x4L", "2", "67.20", "134.40"),
+            ("5", "GFS-88130", "Chicken Breast Boneless Skinless 2x5kg", "2x5kg", "3", "104.00", "312.00"),
+            ("6", "GFS-90002", "Regulatory Fuel and Environmental Surcharge", "EA", "1", "9.25", "9.25"),
+        ],
+        "1237.95",
+        "9.25",
+        "1247.20",
+    )
+
+    # Invoice 6: Flanagan Foodservice Produce & Baking Delivery
+    make_invoice(
+        "test_invoices/06_flanagan_produce_and_baking.pdf",
+        "FLANAGAN FOODSERVICE",
+        "Flanagan Foodservice Inc. &bull; Kitchener/GTA DC<br/>100 Lackner Place, Kitchener, ON N2E 4A8<br/>GST/HST: 101893714 RT0001",
+        "#1e4c27",
+        "FLA-8491023",
+        "Oct 05, 2026",
+        "Oct 06, 2026",
+        "FLA-38192",
+        "<b>Route:</b> FL-WEST-07<br/><b>Stop:</b> 06<br/><b>Driver:</b> D. Campbell<br/><b>Cases:</b> 18",
+        [
+            ("1", "FLA-10492", "Roma Tomatoes 25lb CS", "25lb", "4", "49.50", "198.00"),
+            ("2", "FLA-10495", "Yukon Gold Potatoes 50lb Bag", "50lb", "3", "37.50", "112.50"),
+            ("3", "FLA-10498", "Romaine Lettuce Hearts 12x3ct CS", "36ct", "3", "32.00", "96.00"),
+            ("4", "FLA-10502", "Garlic Peeled 5lb Tub", "5lb", "2", "22.00", "44.00"),
+            ("5", "FLA-33015", "Flour All-Purpose High Gluten 20kg", "20kg", "5", "23.00", "115.00"),
+            ("6", "FLA-90003", "Broadline Split Case & Fuel Fee", "EA", "1", "7.50", "7.50"),
+        ],
+        "565.50",
+        "7.50",
+        "573.00",
+    )
+
 
 if __name__ == "__main__":
     generate_all()
+
