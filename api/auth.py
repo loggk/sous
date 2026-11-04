@@ -10,9 +10,11 @@ from sqlalchemy.orm import Session
 try:
     from .database import get_db
     from .models import User, Restaurant, Organization, UserRestaurant, OrganizationInvitation
+    from .services.geocoding import geocode_to_point
 except (ImportError, ValueError):
     from database import get_db
     from models import User, Restaurant, Organization, UserRestaurant, OrganizationInvitation
+    from services.geocoding import geocode_to_point
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 load_dotenv()
@@ -115,10 +117,12 @@ def get_current_user(
                         org = Organization(name="Pilot Hospitality Group")
                         db.add(org)
                         db.flush()
+                        default_addr = "123 Queen St W, Toronto, ON"
                         restaurant = Restaurant(
                             organization_id=org.id,
                             name="Pilot Pizzeria GTA",
-                            address="123 Queen St W, Toronto, ON",
+                            address=default_addr,
+                            geom=geocode_to_point(default_addr),
                             seats=45,
                             cuisine_type="Pizzeria",
                         )
@@ -233,10 +237,12 @@ def get_current_restaurant_id(
     org = Organization(name="Pilot Hospitality Group")
     db.add(org)
     db.flush()
+    default_addr = "123 Queen St W, Toronto, ON"
     new_rest = Restaurant(
         organization_id=org.id,
         name="Pilot Pizzeria GTA",
-        address="123 Queen St W, Toronto, ON",
+        address=default_addr,
+        geom=geocode_to_point(default_addr),
         seats=45,
         cuisine_type="Pizzeria",
     )

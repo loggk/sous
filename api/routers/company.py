@@ -81,6 +81,7 @@ try:
         AcceptInviteRequest,
     )
     from ..auth import get_current_user, get_current_restaurant_id
+    from ..services.geocoding import geocode_to_point
 except (ImportError, ValueError):
     from database import get_db
     from models import User, Restaurant, Organization, UserRestaurant, OrganizationInvitation
@@ -96,6 +97,7 @@ except (ImportError, ValueError):
         AcceptInviteRequest,
     )
     from auth import get_current_user, get_current_restaurant_id
+    from services.geocoding import geocode_to_point
 
 router = APIRouter(prefix="/company", tags=["Company & Tenancy"])
 
@@ -216,10 +218,14 @@ def register_company(
     db.flush()
 
     # 2. Create Initial Restaurant
+    clean_addr = payload.address.strip() if payload.address else None
+    geom = geocode_to_point(clean_addr) if clean_addr else None
+
     restaurant = Restaurant(
         organization_id=org.id,
         name=payload.restaurant_name.strip(),
-        address=payload.address.strip() if payload.address else None,
+        address=clean_addr,
+        geom=geom,
         cuisine_type=payload.cuisine_type.strip() if payload.cuisine_type else None,
         seats=50,
     )
@@ -282,10 +288,14 @@ def add_location(
     require_owner(user)
     org = resolve_active_organization(user, restaurant_id, db)
 
+    clean_addr = payload.address.strip() if payload.address else None
+    geom = geocode_to_point(clean_addr) if clean_addr else None
+
     new_restaurant = Restaurant(
         organization_id=org.id,
         name=payload.name.strip(),
-        address=payload.address.strip() if payload.address else None,
+        address=clean_addr,
+        geom=geom,
         cuisine_type=payload.cuisine_type.strip() if payload.cuisine_type else None,
         seats=50,
     )
