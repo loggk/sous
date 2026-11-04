@@ -82,6 +82,7 @@ class BenchmarkResponse(BaseModel):
     p75: Optional[float] = None
     n_restaurants: int
     radius_km_used: Optional[int] = None
+    selected_radius_km: Optional[int] = None
     window_start: Optional[date] = None
     window_end: Optional[date] = None
     suppressed: bool
@@ -102,6 +103,7 @@ class BenchmarkSummaryItem(BaseModel):
     suppressed: bool
     n_restaurants: int = 0
     radius_km_used: Optional[int] = None
+    selected_radius_km: Optional[int] = None
     median: Optional[float] = None
     p25: Optional[float] = None
     p75: Optional[float] = None

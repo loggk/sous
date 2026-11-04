@@ -3,7 +3,23 @@
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { api, CanonicalItem, BenchmarkData, BenchmarkSummaryItem } from "@/lib/api";
-import { Scale, Search, ShieldCheck, AlertCircle, Info, MapPin, Building2 } from "lucide-react";
+import { Scale, Search, ShieldCheck, AlertCircle, Info, MapPin, Building2, Sliders } from "lucide-react";
+
+interface RadiusStop {
+  value: number | null;
+  label: string;
+  sublabel: string;
+}
+
+const RADIUS_STOPS: RadiusStop[] = [
+  { value: null, label: "Auto", sublabel: "Adaptive Ladder" },
+  { value: 3, label: "3 km", sublabel: "Hyperlocal" },
+  { value: 5, label: "5 km", sublabel: "District" },
+  { value: 10, label: "10 km", sublabel: "Sub-region" },
+  { value: 15, label: "15 km", sublabel: "Greater Area" },
+  { value: 25, label: "25 km", sublabel: "Regional" },
+  { value: 50, label: "50 km", sublabel: "GTA-wide" },
+];
 
 function BenchmarkContent() {
   const searchParams = useSearchParams();
@@ -12,17 +28,25 @@ function BenchmarkContent() {
   const [items, setItems] = useState<BenchmarkSummaryItem[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<string>(initialItemId || "");
   const [windowDays, setWindowDays] = useState<number>(90);
+  const [sliderIndex, setSliderIndex] = useState<number>(0);
+  const [activeRadiusKm, setActiveRadiusKm] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [withDataOnly, setWithDataOnly] = useState<boolean>(true);
   const [benchmark, setBenchmark] = useState<BenchmarkData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  function handleSliderChange(newIndex: number) {
+    const clamped = Math.max(0, Math.min(newIndex, RADIUS_STOPS.length - 1));
+    setSliderIndex(clamped);
+    setActiveRadiusKm(RADIUS_STOPS[clamped].value);
+  }
+
   // Load catalog items with benchmark availability summary
   useEffect(() => {
     async function loadCatalog() {
       try {
-        const catalog = await api.getBenchmarkSummary(windowDays);
+        const catalog = await api.getBenchmarkSummary(windowDays, activeRadiusKm);
         setItems(catalog);
 
         setSelectedItemId((prev) => {
@@ -55,7 +79,7 @@ function BenchmarkContent() {
       }
     }
     loadCatalog();
-  }, [windowDays]);
+  }, [windowDays, activeRadiusKm]);
 
   function handleToggleWithDataOnly(val: boolean) {
     setWithDataOnly(val);
@@ -70,14 +94,14 @@ function BenchmarkContent() {
     }
   }
 
-  // Load benchmark whenever selected item or window changes
+  // Load benchmark whenever selected item, rolling window, or radius changes
   useEffect(() => {
     if (!selectedItemId) return;
     async function fetchBenchmark() {
       try {
         setLoading(true);
         setError(null);
-        const data = await api.getBenchmark(selectedItemId, windowDays);
+        const data = await api.getBenchmark(selectedItemId, windowDays, activeRadiusKm);
         setBenchmark(data);
         // Sync item data availability with live benchmark response
         setItems((prev) =>
@@ -94,7 +118,7 @@ function BenchmarkContent() {
       }
     }
     fetchBenchmark();
-  }, [selectedItemId, windowDays]);
+  }, [selectedItemId, windowDays, activeRadiusKm]);
 
   const selectedItem = items.find((i) => i.id === selectedItemId);
 
@@ -234,7 +258,7 @@ function BenchmarkContent() {
               <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-[#0e182c]">
                 <button
                   onClick={() => setWindowDays(30)}
-                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                     windowDays === 30
                       ? "bg-[#1b2b4a] text-white shadow-xs dark:bg-blue-600"
                       : "text-slate-600 hover:text-[#1b2b4a] dark:text-slate-400 dark:hover:text-white"
@@ -244,7 +268,7 @@ function BenchmarkContent() {
                 </button>
                 <button
                   onClick={() => setWindowDays(90)}
-                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                     windowDays === 90
                       ? "bg-[#1b2b4a] text-white shadow-xs dark:bg-blue-600"
                       : "text-slate-600 hover:text-[#1b2b4a] dark:text-slate-400 dark:hover:text-white"
@@ -252,6 +276,53 @@ function BenchmarkContent() {
                 >
                   90 Days
                 </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Interactive Competitor Radius Slider */}
+          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-[#131f37] space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Sliders className="h-4 w-4 text-[#2f4a7d] dark:text-blue-400" />
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                  Competitor Trade Radius
+                </span>
+              </div>
+              <div className="inline-flex items-center gap-1.5 rounded-lg bg-[#f0f4fa] px-2.5 py-1 text-xs font-bold text-[#1b2b4a] dark:bg-[#1a2c4e] dark:text-blue-200">
+                <span>{RADIUS_STOPS[sliderIndex].label}</span>
+                <span className="text-slate-400 dark:text-slate-400 font-normal">
+                  — {RADIUS_STOPS[sliderIndex].sublabel}
+                </span>
+              </div>
+            </div>
+
+            {/* Range slider track */}
+            <div className="pt-2 px-1">
+              <input
+                type="range"
+                min={0}
+                max={RADIUS_STOPS.length - 1}
+                step={1}
+                value={sliderIndex}
+                onChange={(e) => handleSliderChange(Number(e.target.value))}
+                className="w-full accent-[#1b2b4a] dark:accent-blue-500 cursor-pointer h-2 bg-slate-100 dark:bg-slate-700 rounded-lg appearance-none transition-all"
+              />
+              <div className="flex justify-between text-[11px] text-slate-400 dark:text-slate-500 pt-2 font-mono">
+                {RADIUS_STOPS.map((stop, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleSliderChange(idx)}
+                    className={`cursor-pointer transition-all hover:text-[#1b2b4a] dark:hover:text-white ${
+                      idx === sliderIndex
+                        ? "font-bold text-[#1b2b4a] dark:text-blue-400 scale-105"
+                        : "text-slate-400 dark:text-slate-500"
+                    }`}
+                  >
+                    {stop.label}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -269,17 +340,42 @@ function BenchmarkContent() {
               <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">{error}</p>
             </div>
           ) : benchmark?.suppressed ? (
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-10 text-center shadow-xs dark:border-slate-800 dark:bg-[#131f37] space-y-3">
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-10 text-center shadow-xs dark:border-slate-800 dark:bg-[#131f37] space-y-4">
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#f0f4fa] text-[#2f4a7d] dark:bg-[#1a2c4e] dark:text-blue-300">
                 <ShieldCheck className="h-6 w-6" />
               </div>
               <h3 className="text-base font-bold text-[#1b2b4a] dark:text-slate-100">
-                More Data Needed for this Item
+                {activeRadiusKm !== null
+                  ? `More Data Needed Within ${activeRadiusKm} km`
+                  : "More Data Needed for this Item"}
               </h3>
               <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-                To protect restaurant privacy and ensure accurate numbers, benchmarks only appear once enough participating restaurants report prices for this ingredient in your region.
+                {benchmark.suppression_reason ||
+                  "To protect restaurant privacy and ensure accurate numbers, benchmarks only appear once enough participating restaurants report prices for this ingredient."}
               </p>
-              <div className="pt-2 text-xs text-slate-400 dark:text-slate-500">
+
+              {activeRadiusKm !== null && (
+                <div className="pt-2 flex flex-wrap items-center justify-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => handleSliderChange(0)}
+                    className="cursor-pointer inline-flex items-center gap-1.5 rounded-xl bg-[#1b2b4a] px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#2f4a7d] transition-all dark:bg-blue-600 dark:hover:bg-blue-500"
+                  >
+                    Switch to Auto-Expand
+                  </button>
+                  {sliderIndex < RADIUS_STOPS.length - 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleSliderChange(sliderIndex + 1)}
+                      className="cursor-pointer inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-all dark:border-slate-700 dark:bg-[#0e182c] dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      Expand to {RADIUS_STOPS[sliderIndex + 1].label}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <div className="pt-1 text-xs text-slate-400 dark:text-slate-500">
                 Benchmarks update automatically as new invoices are uploaded by local operators.
               </div>
             </div>
@@ -301,6 +397,7 @@ function BenchmarkContent() {
                         Market Area:{" "}
                         <strong className="rounded-md bg-blue-100/70 text-[#1b2b4a] px-2 py-0.5 font-bold dark:bg-blue-900/60 dark:text-blue-100">
                           Within {benchmark.radius_km_used} km
+                          {activeRadiusKm !== null ? ` (Target: ${activeRadiusKm} km)` : " (Auto-adapted)"}
                         </strong>
                       </span>
                     </div>

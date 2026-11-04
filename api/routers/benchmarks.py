@@ -33,12 +33,14 @@ def check_contribute_to_consume_entitlement(restaurant_id: uuid.UUID, db: Sessio
 @router.get("/summary", response_model=List[BenchmarkSummaryItem])
 def get_benchmarks_summary(
     window_days: int = Query(90, description="Rolling window: only 30 or 90 days allowed"),
+    radius_km: Optional[int] = Query(None, description="Target radius in km (3, 5, 10, 15, 25, 50, 100) or None for auto-ladder"),
     restaurant_id: uuid.UUID = Depends(get_current_restaurant_id),
     db: Session = Depends(get_db)
 ):
     """
     Retrieve benchmark availability summary for all benchmarkable items.
     Returns whether regional price observations meet k-anonymity privacy thresholds.
+    Supports user-selected trade radius filtering.
     """
     if window_days not in [30, 90]:
         raise HTTPException(status_code=400, detail="window_days must be either 30 or 90.")
@@ -55,12 +57,14 @@ def get_benchmarks_summary(
                 base_unit=item.base_unit,
                 has_data=False,
                 suppressed=True,
-                n_restaurants=0
+                n_restaurants=0,
+                selected_radius_km=radius_km
             )
             for item in items
         ]
 
     try:
+        # Attempt calling upgraded 4-parameter function with :target_radius_km
         sql = text("""
             SELECT 
                 c.id AS canonical_item_id,
@@ -74,13 +78,19 @@ def get_benchmarks_summary(
                 b.p25,
                 b.p75
             FROM canonical_items c
-            CROSS JOIN LATERAL get_benchmark(:restaurant_id, c.id, :window_days) b
+            CROSS JOIN LATERAL get_benchmark(
+                CAST(:restaurant_id AS UUID), 
+                c.id, 
+                CAST(:window_days AS INT), 
+                CAST(:target_radius_km AS INT)
+            ) b
             WHERE c.benchmarkable = true
             ORDER BY c.name
         """)
         rows = db.execute(sql, {
             "restaurant_id": str(restaurant_id),
-            "window_days": window_days
+            "window_days": window_days,
+            "target_radius_km": radius_km
         }).fetchall()
 
         return [
@@ -93,6 +103,7 @@ def get_benchmarks_summary(
                 suppressed=bool(row.suppressed),
                 n_restaurants=row.n_restaurants or 0,
                 radius_km_used=row.radius_km_used,
+                selected_radius_km=radius_km,
                 median=float(row.median) if row.median is not None else None,
                 p25=float(row.p25) if row.p25 is not None else None,
                 p75=float(row.p75) if row.p75 is not None else None,
@@ -100,31 +111,82 @@ def get_benchmarks_summary(
             for row in rows
         ]
     except Exception:
-        items = db.query(CanonicalItem).filter(CanonicalItem.benchmarkable == True).order_by(CanonicalItem.name).all()
-        return [
-            BenchmarkSummaryItem(
-                id=item.id,
-                name=item.name,
-                category=item.category,
-                base_unit=item.base_unit,
-                has_data=False,
-                suppressed=True,
-                n_restaurants=0
-            )
-            for item in items
-        ]
+        db.rollback()
+        # Fallback for pre-migration databases supporting 3 arguments
+        try:
+            sql_fallback = text("""
+                SELECT 
+                    c.id AS canonical_item_id,
+                    c.name,
+                    c.category,
+                    c.base_unit,
+                    b.suppressed,
+                    b.n_restaurants,
+                    b.radius_km_used,
+                    b.p50 AS median,
+                    b.p25,
+                    b.p75
+                FROM canonical_items c
+                CROSS JOIN LATERAL get_benchmark(
+                    CAST(:restaurant_id AS UUID), 
+                    c.id, 
+                    CAST(:window_days AS INT)
+                ) b
+                WHERE c.benchmarkable = true
+                ORDER BY c.name
+            """)
+            rows = db.execute(sql_fallback, {
+                "restaurant_id": str(restaurant_id),
+                "window_days": window_days
+            }).fetchall()
+
+            return [
+                BenchmarkSummaryItem(
+                    id=row.canonical_item_id,
+                    name=row.name,
+                    category=row.category,
+                    base_unit=row.base_unit,
+                    has_data=not bool(row.suppressed),
+                    suppressed=bool(row.suppressed),
+                    n_restaurants=row.n_restaurants or 0,
+                    radius_km_used=row.radius_km_used,
+                    selected_radius_km=radius_km,
+                    median=float(row.median) if row.median is not None else None,
+                    p25=float(row.p25) if row.p25 is not None else None,
+                    p75=float(row.p75) if row.p75 is not None else None,
+                )
+                for row in rows
+            ]
+        except Exception:
+            db.rollback()
+            items = db.query(CanonicalItem).filter(CanonicalItem.benchmarkable == True).order_by(CanonicalItem.name).all()
+            return [
+                BenchmarkSummaryItem(
+                    id=item.id,
+                    name=item.name,
+                    category=item.category,
+                    base_unit=item.base_unit,
+                    has_data=False,
+                    suppressed=True,
+                    n_restaurants=0,
+                    selected_radius_km=radius_km
+                )
+                for item in items
+            ]
 
 
 @router.get("/{canonical_item_id}", response_model=BenchmarkResponse)
 def get_item_benchmark(
     canonical_item_id: uuid.UUID,
     window_days: int = Query(30, description="Rolling window: only 30 or 90 days allowed"),
+    radius_km: Optional[int] = Query(None, description="Target radius in km (3, 5, 10, 15, 25, 50, 100) or None for auto-ladder"),
     restaurant_id: uuid.UUID = Depends(get_current_restaurant_id),
     db: Session = Depends(get_db)
 ):
     """
     Retrieve k-anonymous local price benchmark.
     Executes the secure get_benchmark SQL function in PostgreSQL.
+    Supports user-selected trade radius filtering.
     """
     if window_days not in [30, 90]:
         raise HTTPException(status_code=400, detail="window_days must be either 30 or 90.")
@@ -140,20 +202,48 @@ def get_item_benchmark(
     if not canonical:
         raise HTTPException(status_code=404, detail="Canonical item not found")
 
-    # 2. Call the single SQL function
-    sql = text("""
-        SELECT 
-            p25, p50 AS median, p75,
-            n_restaurants, radius_km_used,
-            window_start, window_end,
-            suppressed, suppression_reason
-        FROM get_benchmark(:restaurant_id, :canonical_item_id, :window_days)
-    """)
-    result = db.execute(sql, {
-        "restaurant_id": str(restaurant_id),
-        "canonical_item_id": str(canonical_item_id),
-        "window_days": window_days
-    }).first()
+    # 2. Call the stored procedure with optional target radius
+    result = None
+    try:
+        sql = text("""
+            SELECT 
+                p25, p50 AS median, p75,
+                n_restaurants, radius_km_used,
+                window_start, window_end,
+                suppressed, suppression_reason
+            FROM get_benchmark(
+                CAST(:restaurant_id AS UUID), 
+                CAST(:canonical_item_id AS UUID), 
+                CAST(:window_days AS INT), 
+                CAST(:target_radius_km AS INT)
+            )
+        """)
+        result = db.execute(sql, {
+            "restaurant_id": str(restaurant_id),
+            "canonical_item_id": str(canonical_item_id),
+            "window_days": window_days,
+            "target_radius_km": radius_km
+        }).first()
+    except Exception:
+        db.rollback()
+        # Fallback for pre-migration database function
+        sql_fallback = text("""
+            SELECT 
+                p25, p50 AS median, p75,
+                n_restaurants, radius_km_used,
+                window_start, window_end,
+                suppressed, suppression_reason
+            FROM get_benchmark(
+                CAST(:restaurant_id AS UUID), 
+                CAST(:canonical_item_id AS UUID), 
+                CAST(:window_days AS INT)
+            )
+        """)
+        result = db.execute(sql_fallback, {
+            "restaurant_id": str(restaurant_id),
+            "canonical_item_id": str(canonical_item_id),
+            "window_days": window_days
+        }).first()
 
     # 3. Find tenant's latest price for comparison
     latest_line = (
@@ -177,7 +267,8 @@ def get_item_benchmark(
             n_restaurants=0,
             suppressed=True,
             suppression_reason="No benchmark data available.",
-            tenant_latest_price=tenant_price
+            tenant_latest_price=tenant_price,
+            selected_radius_km=radius_km
         )
 
     return BenchmarkResponse(
@@ -189,6 +280,7 @@ def get_item_benchmark(
         p75=float(result.p75) if result.p75 is not None else None,
         n_restaurants=result.n_restaurants,
         radius_km_used=result.radius_km_used,
+        selected_radius_km=radius_km,
         window_start=result.window_start,
         window_end=result.window_end,
         suppressed=result.suppressed,

@@ -44,6 +44,7 @@ export interface BenchmarkSummaryItem extends CanonicalItem {
   suppressed: boolean;
   n_restaurants?: number;
   radius_km_used?: number | null;
+  selected_radius_km?: number | null;
   median?: number | null;
   p25?: number | null;
   p75?: number | null;
@@ -58,6 +59,7 @@ export interface BenchmarkData {
   p75?: number | null;
   n_restaurants: number;
   radius_km_used?: number | null;
+  selected_radius_km?: number | null;
   window_start?: string | null;
   window_end?: string | null;
   suppressed: boolean;
@@ -168,8 +170,13 @@ export const api = {
     return res.json();
   },
 
-  async getBenchmark(canonicalItemId: string, windowDays = 90): Promise<BenchmarkData> {
-    const res = await authFetch(`${API_BASE_URL}/benchmarks/${canonicalItemId}?window_days=${windowDays}`);
+  async getBenchmark(canonicalItemId: string, windowDays = 90, radiusKm?: number | null): Promise<BenchmarkData> {
+    const params = new URLSearchParams();
+    params.append("window_days", windowDays.toString());
+    if (radiusKm !== undefined && radiusKm !== null) {
+      params.append("radius_km", radiusKm.toString());
+    }
+    const res = await authFetch(`${API_BASE_URL}/benchmarks/${canonicalItemId}?${params.toString()}`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "Failed to fetch benchmark" }));
       throw new Error(err.detail || "Failed to fetch benchmark");
@@ -177,8 +184,13 @@ export const api = {
     return res.json();
   },
 
-  async getBenchmarkSummary(windowDays = 90): Promise<BenchmarkSummaryItem[]> {
-    const res = await authFetch(`${API_BASE_URL}/benchmarks/summary?window_days=${windowDays}`);
+  async getBenchmarkSummary(windowDays = 90, radiusKm?: number | null): Promise<BenchmarkSummaryItem[]> {
+    const params = new URLSearchParams();
+    params.append("window_days", windowDays.toString());
+    if (radiusKm !== undefined && radiusKm !== null) {
+      params.append("radius_km", radiusKm.toString());
+    }
+    const res = await authFetch(`${API_BASE_URL}/benchmarks/summary?${params.toString()}`);
     if (!res.ok) {
       const catalog = await this.getCatalogItems("", true);
       return catalog.map((c) => ({
