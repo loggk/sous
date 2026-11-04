@@ -5,10 +5,10 @@ from sqlalchemy import text
 
 try:
     from .database import get_db
-    from .routers import invoices, review, benchmarks, audit, catalog
+    from .routers import invoices, review, benchmarks, audit, catalog, company
 except (ImportError, ValueError):
     from database import get_db
-    from routers import invoices, review, benchmarks, audit, catalog
+    from routers import invoices, review, benchmarks, audit, catalog, company
 
 app = FastAPI(
     title="Sous API",
@@ -31,6 +31,7 @@ app.include_router(review.router)
 app.include_router(benchmarks.router)
 app.include_router(audit.router)
 app.include_router(catalog.router)
+app.include_router(company.router)
 
 
 @app.get("/health")

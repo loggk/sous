@@ -26,6 +26,12 @@ export default function InvoicesPage() {
 
   useEffect(() => {
     loadInvoices();
+
+    const handleRestChanged = () => {
+      loadInvoices();
+    };
+    window.addEventListener("sous_restaurant_changed", handleRestChanged);
+    return () => window.removeEventListener("sous_restaurant_changed", handleRestChanged);
   }, []);
 
   async function handleFileUpload(files: FileList | null) {

@@ -25,10 +25,47 @@ except (ImportError, ValueError):
     from database import Base
 
 
+class Organization(Base):
+    __tablename__ = "organizations"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+
+    # Relationships
+    restaurants: Mapped[List["Restaurant"]] = relationship("Restaurant", back_populates="organization", cascade="all, delete-orphan")
+    users: Mapped[List["User"]] = relationship("User", back_populates="organization", cascade="all, delete-orphan")
+    invitations: Mapped[List["OrganizationInvitation"]] = relationship("OrganizationInvitation", back_populates="organization", cascade="all, delete-orphan")
+
+
+class UserRestaurant(Base):
+    __tablename__ = "user_restaurants"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    restaurant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("restaurants.id", ondelete="CASCADE"), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+
+    user: Mapped["User"] = relationship("User", back_populates="restaurant_assignments")
+    restaurant: Mapped["Restaurant"] = relationship("Restaurant", back_populates="user_assignments")
+
+
+class OrganizationInvitation(Base):
+    __tablename__ = "organization_invitations"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    restaurant_ids: Mapped[List[uuid.UUID]] = mapped_column(ARRAY(UUID(as_uuid=True)), default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+
+    organization: Mapped["Organization"] = relationship("Organization", back_populates="invitations")
+
+
 class Restaurant(Base):
     __tablename__ = "restaurants"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     address: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     geom = mapped_column(Geography(geometry_type="POINT", srid=4326), nullable=True)
@@ -37,7 +74,9 @@ class Restaurant(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
 
     # Relationships
-    users: Mapped[List["User"]] = relationship("User", back_populates="restaurant", cascade="all, delete-orphan")
+    organization: Mapped[Optional["Organization"]] = relationship("Organization", back_populates="restaurants")
+    users: Mapped[List["User"]] = relationship("User", back_populates="restaurant")
+    user_assignments: Mapped[List["UserRestaurant"]] = relationship("UserRestaurant", back_populates="restaurant", cascade="all, delete-orphan")
     documents: Mapped[List["Document"]] = relationship("Document", back_populates="restaurant", cascade="all, delete-orphan")
     invoices: Mapped[List["Invoice"]] = relationship("Invoice", back_populates="restaurant", cascade="all, delete-orphan")
     benchmark_observations: Mapped[List["BenchmarkObservation"]] = relationship(
@@ -49,12 +88,15 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    restaurant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("restaurants.id", ondelete="CASCADE"), nullable=False)
+    organization_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True)
+    restaurant_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("restaurants.id", ondelete="SET NULL"), nullable=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
-    role: Mapped[str] = mapped_column(String(50), default="member")  # owner | manager | member
+    role: Mapped[str] = mapped_column(String(50), default="member")  # owner | member
 
     # Relationships
-    restaurant: Mapped["Restaurant"] = relationship("Restaurant", back_populates="users")
+    organization: Mapped[Optional["Organization"]] = relationship("Organization", back_populates="users")
+    restaurant: Mapped[Optional["Restaurant"]] = relationship("Restaurant", back_populates="users")
+    restaurant_assignments: Mapped[List["UserRestaurant"]] = relationship("UserRestaurant", back_populates="user", cascade="all, delete-orphan")
 
 
 class Supplier(Base):

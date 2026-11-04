@@ -137,3 +137,67 @@ class SpendSummaryOut(BaseModel):
     fees_total: float
     top_items: List[TopCostItemOut] = []
 
+
+class RestaurantSummaryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    address: Optional[str] = None
+    seats: Optional[int] = None
+    cuisine_type: Optional[str] = None
+
+
+class CompanyOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    restaurants: List[RestaurantSummaryOut] = []
+    assigned_restaurant_ids: List[UUID] = []
+    is_owner: bool = True
+    user_role: str = "owner"
+
+
+class CompanyRegisterRequest(BaseModel):
+    company_name: str
+    restaurant_name: str
+    address: Optional[str] = None
+    cuisine_type: Optional[str] = None
+    admin_email: str
+
+
+class TeamMemberOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    email: str
+    role: str
+    assigned_restaurant_ids: List[UUID] = []
+    assigned_restaurants: List[RestaurantSummaryOut] = []
+
+
+class TeamInvitationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    email: str
+    restaurant_ids: List[UUID] = []
+    created_at: datetime
+
+
+class InviteTeamMemberRequest(BaseModel):
+    email: str
+    restaurant_ids: List[UUID]
+
+
+class UpdateUserAssignmentsRequest(BaseModel):
+    restaurant_ids: List[UUID]
+
+
+class AddLocationRequest(BaseModel):
+    name: str
+    address: Optional[str] = None
+    cuisine_type: Optional[str] = None
+
+

@@ -43,6 +43,12 @@ export default function DashboardPage() {
       }
     }
     loadData();
+
+    const handleRestChanged = () => {
+      loadData();
+    };
+    window.addEventListener("sous_restaurant_changed", handleRestChanged);
+    return () => window.removeEventListener("sous_restaurant_changed", handleRestChanged);
   }, [windowDays]);
 
   const totalAlertImpact = alerts.reduce((acc, curr) => acc + (curr.estimated_dollar_impact || 0), 0);

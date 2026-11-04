@@ -4,13 +4,26 @@ import { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Lock, Mail, ArrowRight, Sparkles, AlertCircle, CheckCircle2 } from "lucide-react";
+import { api } from "@/lib/api";
+import {
+  Lock,
+  Mail,
+  ArrowRight,
+  Sparkles,
+  AlertCircle,
+  CheckCircle2,
+  Building2,
+  MapPin,
+} from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [locationName, setLocationName] = useState("");
+  const [locationAddress, setLocationAddress] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -29,17 +42,39 @@ export default function LoginPage() {
       const supabase = createClient();
 
       if (isSignUp) {
+        if (!companyName.trim()) {
+          throw new Error("Company or hospitality group name is required");
+        }
+        if (!locationName.trim()) {
+          throw new Error("Initial restaurant location name is required");
+        }
+
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
         });
         if (error) throw error;
 
+        // Register company & initial restaurant location in backend
+        try {
+          const registered = await api.registerCompany({
+            company_name: companyName.trim(),
+            restaurant_name: locationName.trim(),
+            address: locationAddress.trim() || undefined,
+            admin_email: email.trim(),
+          });
+          if (registered.restaurants.length > 0) {
+            localStorage.setItem("sous_active_restaurant_id", registered.restaurants[0].id);
+          }
+        } catch (compErr: any) {
+          console.warn("Backend company registration deferred:", compErr);
+        }
+
         if (data.session) {
           router.push("/");
           router.refresh();
         } else {
-          setSuccessMsg("Check your inbox to confirm your email address!");
+          setSuccessMsg("Check your inbox to confirm your email and complete account setup!");
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
@@ -115,6 +150,57 @@ export default function LoginPage() {
 
         {/* Auth Form */}
         <form onSubmit={handleAuth} className="space-y-4">
+          {isSignUp && (
+            <>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                  Company / Organization Name
+                </label>
+                <div className="relative">
+                  <Building2 className="pointer-events-none absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
+                  <input
+                    type="text"
+                    required
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    placeholder="Queen St Hospitality Group"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pl-10 pr-4 text-sm text-slate-800 placeholder-slate-400 outline-none transition-colors focus:border-[#2f4a7d] focus:bg-white focus:ring-2 focus:ring-[#2f4a7d]/20 dark:border-slate-700 dark:bg-[#0e182c] dark:text-slate-100 dark:focus:border-blue-400 dark:placeholder-slate-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                  First Restaurant / Location Name
+                </label>
+                <div className="relative">
+                  <MapPin className="pointer-events-none absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
+                  <input
+                    type="text"
+                    required
+                    value={locationName}
+                    onChange={(e) => setLocationName(e.target.value)}
+                    placeholder="Queen St Slice Co. (Downtown)"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pl-10 pr-4 text-sm text-slate-800 placeholder-slate-400 outline-none transition-colors focus:border-[#2f4a7d] focus:bg-white focus:ring-2 focus:ring-[#2f4a7d]/20 dark:border-slate-700 dark:bg-[#0e182c] dark:text-slate-100 dark:focus:border-blue-400 dark:placeholder-slate-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
+                  Street Address (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={locationAddress}
+                  onChange={(e) => setLocationAddress(e.target.value)}
+                  placeholder="123 Queen St W, Toronto, ON"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 px-4 text-sm text-slate-800 placeholder-slate-400 outline-none transition-colors focus:border-[#2f4a7d] focus:bg-white focus:ring-2 focus:ring-[#2f4a7d]/20 dark:border-slate-700 dark:bg-[#0e182c] dark:text-slate-100 dark:focus:border-blue-400 dark:placeholder-slate-500"
+                />
+              </div>
+            </>
+          )}
+
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1">
               Email Address

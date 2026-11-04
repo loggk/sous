@@ -79,6 +79,12 @@ function BenchmarkContent() {
       }
     }
     loadCatalog();
+
+    const handleRestChanged = () => {
+      loadCatalog();
+    };
+    window.addEventListener("sous_restaurant_changed", handleRestChanged);
+    return () => window.removeEventListener("sous_restaurant_changed", handleRestChanged);
   }, [windowDays, activeRadiusKm]);
 
   function handleToggleWithDataOnly(val: boolean) {

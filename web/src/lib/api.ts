@@ -116,6 +116,45 @@ export interface ReviewItem {
   } | null;
 }
 
+export interface RestaurantSummary {
+  id: string;
+  name: string;
+  address?: string | null;
+  seats?: number | null;
+  cuisine_type?: string | null;
+}
+
+export interface Company {
+  id: string;
+  name: string;
+  restaurants: RestaurantSummary[];
+  assigned_restaurant_ids: string[];
+  is_owner: boolean;
+  user_role: string;
+}
+
+export interface TeamMember {
+  id: string;
+  email: string;
+  role: string;
+  assigned_restaurant_ids: string[];
+  assigned_restaurants: RestaurantSummary[];
+}
+
+export interface TeamInvitation {
+  id: string;
+  email: string;
+  restaurant_ids: string[];
+  created_at: string;
+}
+
+export interface TeamData {
+  company_id: string;
+  company_name: string;
+  members: TeamMember[];
+  invitations: TeamInvitation[];
+}
+
 async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
   let token: string | null = null;
   let supabaseClient: any = null;
@@ -131,6 +170,14 @@ async function authFetch(url: string, options: RequestInit = {}): Promise<Respon
   const headers = new Headers(options.headers || {});
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  // Attach X-Restaurant-ID if stored in localStorage
+  if (typeof window !== "undefined") {
+    const activeRestId = localStorage.getItem("sous_active_restaurant_id");
+    if (activeRestId && !headers.has("X-Restaurant-ID")) {
+      headers.set("X-Restaurant-ID", activeRestId);
+    }
   }
 
   const res = await fetch(url, { ...options, headers });
@@ -272,6 +319,102 @@ export const api = {
       method: "POST",
     });
     if (!res.ok) throw new Error("Failed to dismiss review item");
+    return res.json();
+  },
+
+  async getCompany(): Promise<Company> {
+    const res = await authFetch(`${API_BASE_URL}/company/me`);
+    if (!res.ok) throw new Error("Failed to fetch company details");
+    return res.json();
+  },
+
+  async registerCompany(data: {
+    company_name: string;
+    restaurant_name: string;
+    address?: string;
+    cuisine_type?: string;
+    admin_email: string;
+  }): Promise<Company> {
+    const res = await authFetch(`${API_BASE_URL}/company/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Failed to register company" }));
+      throw new Error(err.detail || "Failed to register company");
+    }
+    return res.json();
+  },
+
+  async addLocation(data: {
+    name: string;
+    address?: string;
+    cuisine_type?: string;
+  }): Promise<RestaurantSummary> {
+    const res = await authFetch(`${API_BASE_URL}/company/locations`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Failed to add location" }));
+      throw new Error(err.detail || "Failed to add location");
+    }
+    return res.json();
+  },
+
+  async getTeam(): Promise<TeamData> {
+    const res = await authFetch(`${API_BASE_URL}/company/team`);
+    if (!res.ok) throw new Error("Failed to fetch team");
+    return res.json();
+  },
+
+  async inviteTeamMember(email: string, restaurantIds: string[]) {
+    const res = await authFetch(`${API_BASE_URL}/company/team/invite`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, restaurant_ids: restaurantIds }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Failed to invite team member" }));
+      throw new Error(err.detail || "Failed to invite team member");
+    }
+    return res.json();
+  },
+
+  async updateUserRestaurants(userId: string, restaurantIds: string[]) {
+    const res = await authFetch(`${API_BASE_URL}/company/team/${userId}/restaurants`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ restaurant_ids: restaurantIds }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Failed to update assignments" }));
+      throw new Error(err.detail || "Failed to update assignments");
+    }
+    return res.json();
+  },
+
+  async removeTeamMember(userId: string) {
+    const res = await authFetch(`${API_BASE_URL}/company/team/${userId}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Failed to remove member" }));
+      throw new Error(err.detail || "Failed to remove member");
+    }
+    return res.json();
+  },
+
+  async cancelInvitation(inviteId: string) {
+    const res = await authFetch(`${API_BASE_URL}/company/team/invitations/${inviteId}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Failed to cancel invitation" }));
+      throw new Error(err.detail || "Failed to cancel invitation");
+    }
     return res.json();
   },
 };
