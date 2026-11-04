@@ -191,6 +191,11 @@ class InviteTeamMemberRequest(BaseModel):
     restaurant_ids: List[UUID]
 
 
+class AcceptInviteRequest(BaseModel):
+    email: str
+    password: str
+
+
 class UpdateUserAssignmentsRequest(BaseModel):
     restaurant_ids: List[UUID]
 

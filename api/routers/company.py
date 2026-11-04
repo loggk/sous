@@ -1,7 +1,70 @@
+import os
 import uuid
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+import httpx
+import jwt
+
+SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").strip() or None
+SUPABASE_SERVICE_ROLE_KEY = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip() or None
+SUPABASE_JWT_SECRET = (os.getenv("SUPABASE_JWT_SECRET") or "").strip() or None
+
+
+def send_supabase_email_invite(email: str, org_name: str) -> bool:
+    """
+    Calls Supabase Auth Admin API (/auth/v1/invite) to dispatch an official
+    invitation email to the recipient with an onboarding magic link.
+    """
+    if not SUPABASE_URL:
+        return False
+
+    service_token = SUPABASE_SERVICE_ROLE_KEY
+    if not service_token and SUPABASE_JWT_SECRET:
+        try:
+            service_token = jwt.encode(
+                {
+                    "iss": "supabase",
+                    "ref": "sbmaldgkujtuadthdiur",
+                    "role": "service_role",
+                    "iat": 1791160698,
+                    "exp": 2106736698,
+                },
+                SUPABASE_JWT_SECRET,
+                algorithm="HS256",
+            )
+        except Exception:
+            service_token = None
+
+    if not service_token:
+        print("[INVITE WARNING] No Supabase service role key available to send invitation email.")
+        return False
+
+    try:
+        with httpx.Client(timeout=8.0) as client:
+            resp = client.post(
+                f"{SUPABASE_URL}/auth/v1/invite",
+                headers={
+                    "apikey": service_token,
+                    "Authorization": f"Bearer {service_token}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "email": email,
+                    "data": {
+                        "organization_name": org_name,
+                    },
+                },
+            )
+            if resp.status_code in [200, 201]:
+                print(f"[INVITE SUCCESS] Invitation email dispatched via Supabase to {email}")
+                return True
+            else:
+                print(f"[INVITE NOTICE] Supabase invite status {resp.status_code}: {resp.text}")
+                return False
+    except Exception as e:
+        print(f"[INVITE ERROR] Could not send Supabase invitation email ({type(e).__name__}): {e}")
+        return False
 
 try:
     from ..database import get_db
@@ -15,6 +78,7 @@ try:
         InviteTeamMemberRequest,
         UpdateUserAssignmentsRequest,
         AddLocationRequest,
+        AcceptInviteRequest,
     )
     from ..auth import get_current_user, get_current_restaurant_id
 except (ImportError, ValueError):
@@ -29,6 +93,7 @@ except (ImportError, ValueError):
         InviteTeamMemberRequest,
         UpdateUserAssignmentsRequest,
         AddLocationRequest,
+        AcceptInviteRequest,
     )
     from auth import get_current_user, get_current_restaurant_id
 
@@ -358,9 +423,19 @@ def invite_team_member(
         db.add(new_invite)
 
     db.commit()
+
+    # Dispatch email invitation via Supabase Auth Admin
+    email_sent = send_supabase_email_invite(clean_email, org.name)
+
+    msg = (
+        f"Invitation email sent to {clean_email}."
+        if email_sent
+        else f"Invitation created for {clean_email}. They will automatically join upon signing in."
+    )
     return {
         "status": "invited",
-        "message": f"Invitation created for {clean_email}. They will automatically join upon signing in.",
+        "email_sent": email_sent,
+        "message": msg,
     }
 
 
@@ -463,3 +538,140 @@ def cancel_invitation(
     db.delete(invite)
     db.commit()
     return {"status": "success", "message": "Invitation canceled"}
+
+
+@router.post("/accept-invite")
+def accept_invitation(
+    payload: AcceptInviteRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Allows an invited team member to accept their invitation and set their password.
+    Directly activates their Supabase user and connects them to their assigned
+    company venues in the database.
+    """
+    clean_email = payload.email.strip().lower()
+    if not clean_email or "@" not in clean_email:
+        raise HTTPException(status_code=400, detail="A valid email address is required")
+    if len(payload.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    # 1. Verify invitation exists in our database
+    invite = (
+        db.query(OrganizationInvitation)
+        .filter(OrganizationInvitation.email.ilike(clean_email))
+        .first()
+    )
+    if not invite:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No pending invitation found for this email address. Please ask your company owner to invite you, or register a new company.",
+        )
+
+    org = db.query(Organization).filter(Organization.id == invite.organization_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Inviting organization not found")
+
+    # 2. Provision / activate user in Supabase Auth via Admin API
+    user_uuid = None
+    service_token = SUPABASE_SERVICE_ROLE_KEY
+    if not service_token and SUPABASE_JWT_SECRET:
+        try:
+            service_token = jwt.encode(
+                {
+                    "iss": "supabase",
+                    "ref": "sbmaldgkujtuadthdiur",
+                    "role": "service_role",
+                    "iat": 1791160698,
+                    "exp": 2106736698,
+                },
+                SUPABASE_JWT_SECRET,
+                algorithm="HS256",
+            )
+        except Exception:
+            service_token = None
+
+    if SUPABASE_URL and service_token:
+        headers = {
+            "apikey": service_token,
+            "Authorization": f"Bearer {service_token}",
+            "Content-Type": "application/json",
+        }
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                search_resp = client.get(
+                    f"{SUPABASE_URL}/auth/v1/admin/users",
+                    headers=headers,
+                )
+                existing_sp_user = None
+                if search_resp.status_code == 200:
+                    for u in search_resp.json().get("users", []):
+                        if u.get("email", "").lower() == clean_email:
+                            existing_sp_user = u
+                            break
+
+                if existing_sp_user:
+                    user_uuid = uuid.UUID(existing_sp_user["id"])
+                    up_resp = client.put(
+                        f"{SUPABASE_URL}/auth/v1/admin/users/{user_uuid}",
+                        headers=headers,
+                        json={"password": payload.password, "email_confirm": True},
+                    )
+                    if up_resp.status_code not in [200, 201]:
+                        print(f"[AUTH ADMIN WARNING] Failed to update password in Supabase: {up_resp.text}")
+                else:
+                    create_resp = client.post(
+                        f"{SUPABASE_URL}/auth/v1/admin/users",
+                        headers=headers,
+                        json={
+                            "email": clean_email,
+                            "password": payload.password,
+                            "email_confirm": True,
+                            "user_metadata": {"organization_name": org.name},
+                        },
+                    )
+                    if create_resp.status_code in [200, 201]:
+                        user_uuid = uuid.UUID(create_resp.json()["id"])
+                    else:
+                        print(f"[AUTH ADMIN WARNING] Failed to create user in Supabase: {create_resp.text}")
+        except Exception as e:
+            print(f"[AUTH ADMIN ERROR] Supabase admin call failed ({type(e).__name__}): {e}")
+
+    # Fallback UUID if Supabase admin call failed / offline
+    if not user_uuid:
+        user_uuid = uuid.uuid4()
+
+    # 3. Create or attach User in local database
+    user = db.query(User).filter(User.email.ilike(clean_email)).first()
+    first_restaurant_id = invite.restaurant_ids[0] if invite.restaurant_ids else None
+
+    if user:
+        user.organization_id = org.id
+        if first_restaurant_id:
+            user.restaurant_id = first_restaurant_id
+        user.role = "member"
+    else:
+        user = User(
+            id=user_uuid,
+            organization_id=org.id,
+            restaurant_id=first_restaurant_id,
+            email=clean_email,
+            role="member",
+        )
+        db.add(user)
+        db.flush()
+
+    # Assign venues
+    db.query(UserRestaurant).filter(UserRestaurant.user_id == user.id).delete()
+    for rid in invite.restaurant_ids:
+        db.add(UserRestaurant(user_id=user.id, restaurant_id=rid))
+
+    # Remove the invitation now that it's consumed
+    db.delete(invite)
+    db.commit()
+
+    return {
+        "status": "success",
+        "company_name": org.name,
+        "message": f"Successfully joined {org.name}! Logging you in...",
+    }

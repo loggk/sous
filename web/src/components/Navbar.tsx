@@ -30,8 +30,17 @@ export function Navbar() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const loadCompanyData = async () => {
+  const loadCompanyData = async (emailOverride?: string | null) => {
     try {
+      const supabase = createClient();
+      const { data } = await supabase.auth.getUser();
+      const currentEmail = emailOverride !== undefined ? emailOverride : data.user?.email || null;
+      if (!currentEmail) {
+        setCompany(null);
+        setActiveRestaurantId(null);
+        return;
+      }
+
       const comp = await api.getCompany();
       setCompany(comp);
       const stored = typeof window !== "undefined" ? localStorage.getItem("sous_active_restaurant_id") : null;
@@ -50,8 +59,6 @@ export function Navbar() {
   };
 
   useEffect(() => {
-    loadCompanyData();
-
     function handleClickOutside(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setDropdownOpen(false);
@@ -65,14 +72,25 @@ export function Navbar() {
     try {
       const supabase = createClient();
       supabase.auth.getUser().then(({ data }) => {
-        if (data.user?.email) {
-          setUserEmail(data.user.email);
+        const email = data.user?.email || null;
+        setUserEmail(email);
+        if (email) {
+          loadCompanyData(email);
+        } else {
+          setCompany(null);
+          setActiveRestaurantId(null);
         }
       });
 
       const { data: authListener } = supabase.auth.onAuthStateChange((_, session) => {
-        setUserEmail(session?.user?.email || null);
-        loadCompanyData();
+        const email = session?.user?.email || null;
+        setUserEmail(email);
+        if (email) {
+          loadCompanyData(email);
+        } else {
+          setCompany(null);
+          setActiveRestaurantId(null);
+        }
       });
 
       return () => {
@@ -98,6 +116,8 @@ export function Navbar() {
       const supabase = createClient();
       await supabase.auth.signOut();
       setUserEmail(null);
+      setCompany(null);
+      setActiveRestaurantId(null);
       if (typeof window !== "undefined") {
         localStorage.removeItem("sous_active_restaurant_id");
       }
@@ -108,7 +128,7 @@ export function Navbar() {
     }
   }
 
-  const isOwner = company?.is_owner ?? true;
+  const isOwner = Boolean(userEmail && (company?.is_owner ?? true));
 
   const navItems = [
     { name: "Insights", href: "/", icon: TrendingUp },
@@ -161,85 +181,87 @@ export function Navbar() {
         </div>
 
         <div className="flex items-center gap-3 sm:gap-4">
-          {/* Company & Location Selector */}
-          <div className="relative" ref={dropdownRef}>
-            <button
-              onClick={() => setDropdownOpen(!dropdownOpen)}
-              className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-1.5 text-left transition-all hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800/80 dark:hover:bg-slate-800 cursor-pointer"
-            >
-              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[#1b2b4a] text-white dark:bg-blue-600">
-                <Building2 className="h-4 w-4" />
-              </div>
-              <div className="flex flex-col text-left">
-                <span className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase dark:text-slate-400">
-                  {company?.name || "Queen St Hospitality"}
-                </span>
-                <span className="text-xs font-bold text-[#1b2b4a] dark:text-slate-200 truncate max-w-[130px] sm:max-w-[180px]">
-                  {activeVenue?.name || "Queen St Slice Co."}
-                </span>
-              </div>
-              <ChevronDown className="h-3.5 w-3.5 text-slate-400 transition-transform dark:text-slate-500 ml-1" />
-            </button>
-
-            {dropdownOpen && (
-              <div className="absolute right-0 mt-2 w-72 origin-top-right rounded-xl border border-slate-200 bg-white p-2 shadow-xl ring-1 ring-black/5 dark:border-slate-800 dark:bg-[#0f172a] z-50">
-                <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800">
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    Company Locations
-                  </p>
-                  <p className="text-xs text-slate-600 dark:text-slate-300 font-medium truncate">
-                    {company?.name}
-                  </p>
+          {/* Company & Location Selector - only shown when authenticated */}
+          {userEmail && company && (
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setDropdownOpen(!dropdownOpen)}
+                className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-1.5 text-left transition-all hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800/80 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[#1b2b4a] text-white dark:bg-blue-600">
+                  <Building2 className="h-4 w-4" />
                 </div>
-                <div className="max-h-60 overflow-y-auto py-1">
-                  {company?.restaurants.map((rest) => {
-                    const isSelected = rest.id === activeVenue?.id;
-                    const isAssigned =
-                      company.assigned_restaurant_ids.length === 0 ||
-                      company.assigned_restaurant_ids.includes(rest.id);
-
-                    return (
-                      <button
-                        key={rest.id}
-                        disabled={!isAssigned}
-                        onClick={() => handleSelectRestaurant(rest.id)}
-                        className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors cursor-pointer ${
-                          isSelected
-                            ? "bg-blue-50 text-blue-900 font-semibold dark:bg-blue-950/60 dark:text-blue-200"
-                            : isAssigned
-                            ? "text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
-                            : "opacity-40 cursor-not-allowed text-slate-400"
-                        }`}
-                      >
-                        <div className="flex flex-col truncate pr-2">
-                          <span className="truncate">{rest.name}</span>
-                          {rest.address && (
-                            <span className="text-[10px] text-slate-400 flex items-center gap-1 truncate">
-                              <MapPin className="h-2.5 w-2.5 shrink-0" />
-                              {rest.address}
-                            </span>
-                          )}
-                        </div>
-                        {isSelected && <Check className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />}
-                      </button>
-                    );
-                  })}
+                <div className="flex flex-col text-left">
+                  <span className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase dark:text-slate-400">
+                    {company?.name || "Queen St Hospitality"}
+                  </span>
+                  <span className="text-xs font-bold text-[#1b2b4a] dark:text-slate-200 truncate max-w-[130px] sm:max-w-[180px]">
+                    {activeVenue?.name || "Queen St Slice Co."}
+                  </span>
                 </div>
-                {isOwner && (
-                  <div className="border-t border-slate-100 p-1 dark:border-slate-800">
-                    <Link
-                      href="/team"
-                      onClick={() => setDropdownOpen(false)}
-                      className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-blue-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-blue-400"
-                    >
-                      <Users className="h-3.5 w-3.5" />
-                      <span>Manage Team & Locations</span>
-                    </Link>
+                <ChevronDown className="h-3.5 w-3.5 text-slate-400 transition-transform dark:text-slate-500 ml-1" />
+              </button>
+
+              {dropdownOpen && (
+                <div className="absolute right-0 mt-2 w-72 origin-top-right rounded-xl border border-slate-200 bg-white p-2 shadow-xl ring-1 ring-black/5 dark:border-slate-800 dark:bg-[#0f172a] z-50">
+                  <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800">
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      Company Locations
+                    </p>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 font-medium truncate">
+                      {company?.name}
+                    </p>
                   </div>
-                )}
-              </div>
-            )}
-          </div>
+                  <div className="max-h-60 overflow-y-auto py-1">
+                    {company?.restaurants.map((rest) => {
+                      const isSelected = rest.id === activeVenue?.id;
+                      const isAssigned =
+                        company.assigned_restaurant_ids.length === 0 ||
+                        company.assigned_restaurant_ids.includes(rest.id);
+
+                      return (
+                        <button
+                          key={rest.id}
+                          disabled={!isAssigned}
+                          onClick={() => handleSelectRestaurant(rest.id)}
+                          className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors cursor-pointer ${
+                            isSelected
+                              ? "bg-blue-50 text-blue-900 font-semibold dark:bg-blue-950/60 dark:text-blue-200"
+                              : isAssigned
+                              ? "text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
+                              : "opacity-40 cursor-not-allowed text-slate-400"
+                          }`}
+                        >
+                          <div className="flex flex-col truncate pr-2">
+                            <span className="truncate">{rest.name}</span>
+                            {rest.address && (
+                              <span className="text-[10px] text-slate-400 flex items-center gap-1 truncate">
+                                <MapPin className="h-2.5 w-2.5 shrink-0" />
+                                {rest.address}
+                              </span>
+                            )}
+                          </div>
+                          {isSelected && <Check className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {isOwner && (
+                    <div className="border-t border-slate-100 p-1 dark:border-slate-800">
+                      <Link
+                        href="/team"
+                        onClick={() => setDropdownOpen(false)}
+                        className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-blue-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-blue-400"
+                      >
+                        <Users className="h-3.5 w-3.5" />
+                        <span>Manage Team & Locations</span>
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Light / Dark Mode Toggle */}
           <ThemeToggle />

@@ -417,5 +417,18 @@ export const api = {
     }
     return res.json();
   },
+
+  async acceptInvite(email: string, password: string): Promise<{ status: string; company_name: string; message: string }> {
+    const res = await fetch(`${API_BASE_URL}/company/accept-invite`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Failed to accept invitation" }));
+      throw new Error(err.detail || "Failed to accept invitation");
+    }
+    return res.json();
+  },
 };
 
