@@ -20,6 +20,7 @@ try:
         BenchmarkObservation,
         Restaurant,
     )
+    from .embeddings import generate_embedding
 except (ImportError, ValueError):
     from models import (
         Document,
@@ -32,6 +33,10 @@ except (ImportError, ValueError):
         BenchmarkObservation,
         Restaurant,
     )
+    from services.embeddings import generate_embedding
+
+HIGH_CONFIDENCE_THRESHOLD = 0.82
+MEDIUM_CONFIDENCE_THRESHOLD = 0.65
 
 
 def compute_sha256(content: bytes) -> str:
@@ -338,7 +343,7 @@ def extract_invoice_from_pdf(file_path: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def process_invoice_document(db: Session, document_id: uuid.UUID):
+def process_invoice_document(db: Session, document_id: uuid.UUID, extracted_data: Optional[Dict[str, Any]] = None):
     """
     Background Task: Process uploaded document through extraction, validation, and normalization.
     """
@@ -351,9 +356,16 @@ def process_invoice_document(db: Session, document_id: uuid.UUID):
 
     try:
         # 1. Extraction: Attempt direct PDF stream parsing first, fallback to mock prototype if needed
-        extracted = None
-        if doc.storage_key and (doc.storage_key.lower().endswith(".pdf") or doc.mime == "application/pdf"):
-            extracted = extract_invoice_from_pdf(doc.storage_key)
+        extracted = extracted_data
+        if not extracted and doc.storage_key:
+            try:
+                from .storage import get_local_file_path
+            except (ImportError, ValueError):
+                from services.storage import get_local_file_path
+
+            local_fpath = get_local_file_path(doc.storage_key, doc.content_sha256)
+            if local_fpath and os.path.exists(local_fpath) and (local_fpath.lower().endswith(".pdf") or doc.mime == "application/pdf"):
+                extracted = extract_invoice_from_pdf(local_fpath)
 
         if extracted and extracted.get("lines"):
             supplier_canonical = extracted.get("supplier_name", "Sysco GTA")
@@ -426,6 +438,7 @@ def process_invoice_document(db: Session, document_id: uuid.UUID):
         ).first()
 
         if existing_invoice:
+            existing_invoice.document_id = doc.id
             doc.status = "completed"
             db.commit()
             return
@@ -470,6 +483,7 @@ def process_invoice_document(db: Session, document_id: uuid.UUID):
 
             canonical_id = None
             price_per_base = None
+            suggested_matches = []
 
             # Normalization lookup in sku_mappings cache or canonical items
             if line_kind == "item":
@@ -483,36 +497,48 @@ def process_invoice_document(db: Session, document_id: uuid.UUID):
                 if cached:
                     canonical_id = cached.canonical_item_id
                 else:
-                    # Smart keyword matching against canonical items
-                    desc_lower = raw["raw_description"].lower()
-                    matched_item = None
-                    keywords = [
-                        "roma", "canola", "mozzarella", "flour", "pepperoni", "tomato",
-                        "potato", "onion", "garlic", "lettuce", "basil", "butter", 
-                        "cream", "parmigiano", "pecorino", "sugar", "salt", "egg", 
-                        "chicken", "bacon", "olive oil", "yeast", "scallion", "mushroom",
-                        "cheddar", "beef", "pork", "milk", "cheese"
-                    ]
-                    for kw in keywords:
-                        if kw in desc_lower:
-                            matched_item = db.query(CanonicalItem).filter(
-                                CanonicalItem.name.ilike(f"%{kw}%")
-                            ).first()
-                            if matched_item:
-                                break
-                    if matched_item:
-                        canonical_id = matched_item.id
-                        if raw.get("supplier_sku"):
-                            # Seed into sku_mappings cache for deterministic future resolution
-                            db.add(SkuMapping(
-                                supplier_id=supplier.id,
-                                supplier_sku=raw["supplier_sku"],
-                                canonical_item_id=matched_item.id,
-                                pack_units=units or 1,
-                                pack_size=size,
-                                pack_measure=measure or matched_item.base_unit
-                            ))
-                            db.flush()
+                    # Semantic vector matching against canonical items using pgvector
+                    query_vec = generate_embedding(raw["raw_description"])
+                    top_matches = (
+                        db.query(
+                            CanonicalItem,
+                            (1 - CanonicalItem.embedding.cosine_distance(query_vec)).label("similarity")
+                        )
+                        .filter(CanonicalItem.embedding.isnot(None))
+                        .order_by(CanonicalItem.embedding.cosine_distance(query_vec))
+                        .limit(3)
+                        .all()
+                    )
+
+                    if top_matches:
+                        best_item, best_sim = top_matches[0]
+                        best_sim_val = float(best_sim)
+                        if best_sim_val >= HIGH_CONFIDENCE_THRESHOLD:
+                            canonical_id = best_item.id
+                            if raw.get("supplier_sku"):
+                                # Seed into sku_mappings cache for deterministic future resolution
+                                db.add(SkuMapping(
+                                    supplier_id=supplier.id,
+                                    supplier_sku=raw["supplier_sku"],
+                                    canonical_item_id=best_item.id,
+                                    pack_units=units or 1,
+                                    pack_size=size,
+                                    pack_measure=measure or best_item.base_unit,
+                                    confidence=round(best_sim_val, 3)
+                                ))
+                                db.flush()
+                        else:
+                            # Pre-populate top candidates for operator review queue
+                            for match_item, sim in top_matches:
+                                sim_val = float(sim)
+                                if sim_val >= 0.50:
+                                    suggested_matches.append({
+                                        "id": str(match_item.id),
+                                        "name": match_item.name,
+                                        "category": match_item.category,
+                                        "base_unit": match_item.base_unit,
+                                        "similarity": round(sim_val, 3)
+                                    })
 
 
                 if canonical_id:
@@ -552,6 +578,7 @@ def process_invoice_document(db: Session, document_id: uuid.UUID):
                         "supplier_sku": raw.get("supplier_sku"),
                         "pack_descriptor": raw.get("pack_descriptor"),
                         "supplier_name": supplier.canonical_name,
+                        "suggested_matches": suggested_matches,
                     },
                     status="pending"
                 ))

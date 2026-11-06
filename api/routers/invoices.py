@@ -2,6 +2,7 @@ import uuid
 import os
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks, Header
+from fastapi.responses import RedirectResponse, FileResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select
 
@@ -10,11 +11,23 @@ try:
     from ..models import Document, Invoice, InvoiceLine, Restaurant, ReviewItem
     from ..schemas import InvoiceUploadResponse, InvoiceSummaryOut, InvoiceDetailOut, InvoiceLineOut
     from ..services.pipeline import compute_sha256, process_invoice_document
+    from ..services.storage import (
+        upload_invoice_file,
+        get_invoice_signed_url,
+        delete_invoice_file,
+        get_local_file_path,
+    )
 except (ImportError, ValueError):
     from database import get_db, SessionLocal
     from models import Document, Invoice, InvoiceLine, Restaurant, ReviewItem
     from schemas import InvoiceUploadResponse, InvoiceSummaryOut, InvoiceDetailOut, InvoiceLineOut
     from services.pipeline import compute_sha256, process_invoice_document
+    from services.storage import (
+        upload_invoice_file,
+        get_invoice_signed_url,
+        delete_invoice_file,
+        get_local_file_path,
+    )
 
 router = APIRouter(prefix="/invoices", tags=["Invoices"])
 
@@ -86,16 +99,19 @@ async def upload_invoice(
             message="Duplicate document detected. Using existing record."
         )
 
-    # 2. Immutable storage
-    filename = f"{content_sha256}_{file.filename}"
-    file_path = os.path.join(UPLOAD_STORAGE_DIR, filename)
-    with open(file_path, "wb") as f:
-        f.write(content)
+    # 2. Immutable storage (Supabase S3 + local cache)
+    storage_key, _ = upload_invoice_file(
+        content=content,
+        restaurant_id=str(restaurant_id),
+        content_sha256=content_sha256,
+        original_filename=file.filename or "invoice.pdf",
+        mime=file.content_type or "application/pdf"
+    )
 
     # 3. Create document record
     doc = Document(
         restaurant_id=restaurant_id,
-        storage_key=file_path,
+        storage_key=storage_key,
         content_sha256=content_sha256,
         mime=file.content_type or "application/pdf",
         source_channel="web_upload",
@@ -129,7 +145,12 @@ def list_invoices(
         .order_by(Invoice.invoice_date.desc())
         .all()
     )
-    return invoices
+    result = []
+    for inv in invoices:
+        item = InvoiceSummaryOut.model_validate(inv)
+        item.pdf_url = f"/invoices/{inv.id}/pdf"
+        result.append(item)
+    return result
 
 
 @router.get("/{invoice_id}", response_model=InvoiceDetailOut)
@@ -152,7 +173,113 @@ def get_invoice_detail(
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
-    return invoice
+    res = InvoiceDetailOut.model_validate(invoice)
+    res.pdf_url = f"/invoices/{invoice.id}/pdf"
+    return res
+
+
+@router.get("/{invoice_id}/pdf")
+def view_invoice_pdf(
+    invoice_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Open or stream the original uploaded PDF invoice.
+    1. If stored in Supabase Storage, redirects (307) to a secure time-limited presigned URL.
+    2. If stored on local disk, streams the file directly with FileResponse.
+    3. If neither exists (mock/seeded invoice or missing scan), dynamically generates a broadline PDF invoice.
+    """
+    invoice = (
+        db.query(Invoice)
+        .options(
+            joinedload(Invoice.document),
+            joinedload(Invoice.supplier),
+            joinedload(Invoice.restaurant),
+            joinedload(Invoice.lines)
+        )
+        .filter(Invoice.id == invoice_id)
+        .first()
+    )
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    storage_key = invoice.document.storage_key if invoice.document else None
+    content_sha = invoice.document.content_sha256 if invoice.document else None
+
+    # 1. Supabase Storage Signed URL
+    if storage_key and storage_key.startswith("supabase://"):
+        signed_url = get_invoice_signed_url(storage_key, expires_in=3600)
+        if signed_url:
+            return RedirectResponse(url=signed_url, status_code=307)
+
+    # 2. Local File / Cache fallback
+    if storage_key and content_sha:
+        local_path = get_local_file_path(storage_key, content_sha)
+        if local_path and os.path.exists(local_path):
+            return FileResponse(
+                local_path,
+                media_type=(invoice.document.mime if invoice.document else None) or "application/pdf",
+                filename=invoice.file_name or f"{invoice.invoice_number}.pdf",
+                content_disposition_type="inline"
+            )
+
+    # 3. Dynamic synthesis fallback (for mock/seed invoices or missing scans)
+    try:
+        from ..services.pdf_generator import generate_invoice_pdf
+    except (ImportError, ValueError):
+        from services.pdf_generator import generate_invoice_pdf
+
+    pdf_bytes = generate_invoice_pdf(invoice)
+
+    # Cache locally so subsequent loads are instant
+    cached_path = os.path.join(UPLOAD_STORAGE_DIR, f"{invoice.id}.pdf")
+    try:
+        with open(cached_path, "wb") as f:
+            f.write(pdf_bytes)
+    except Exception:
+        pass
+
+    from fastapi.responses import Response
+    filename = invoice.file_name or f"{invoice.invoice_number or 'invoice'}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"inline; filename={filename}",
+            "Cache-Control": "public, max-age=3600"
+        }
+    )
+
+
+@router.get("/{invoice_id}/pdf-url")
+def get_invoice_pdf_url_endpoint(
+    invoice_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Returns the secure direct URL to view the invoice PDF in the browser or an iframe.
+    """
+    invoice = (
+        db.query(Invoice)
+        .options(joinedload(Invoice.document))
+        .filter(Invoice.id == invoice_id)
+        .first()
+    )
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice or document not found")
+
+    storage_key = invoice.document.storage_key if invoice.document else None
+    signed_url = None
+    if storage_key and storage_key.startswith("supabase://"):
+        signed_url = get_invoice_signed_url(storage_key, expires_in=3600)
+
+    view_url = signed_url or f"/invoices/{invoice_id}/pdf"
+    return {
+        "invoice_id": str(invoice_id),
+        "url": view_url,
+        "is_signed_url": bool(signed_url),
+        "file_name": invoice.file_name or f"{invoice.invoice_number}.pdf"
+    }
 
 
 @router.delete("/{invoice_id}")
@@ -163,7 +290,7 @@ def delete_invoice(
 ):
     """
     Delete an invoice and its associated document record (resetting duplicate SHA-256 detection).
-    Also cleans up associated review items.
+    Also cleans up associated review items and Supabase storage files.
     """
     invoice = db.query(Invoice).filter(
         Invoice.id == invoice_id,
@@ -182,15 +309,12 @@ def delete_invoice(
     db.delete(invoice)
     db.flush()
 
-    # 3. Clean up associated Document to reset SHA-256 duplicate cache
+    # 3. Clean up associated Document and file storage
     if document_id:
         doc = db.query(Document).filter(Document.id == document_id).first()
         if doc:
-            if doc.storage_key and os.path.exists(doc.storage_key):
-                try:
-                    os.remove(doc.storage_key)
-                except Exception:
-                    pass
+            if doc.storage_key:
+                delete_invoice_file(doc.storage_key)
             db.delete(doc)
 
     db.commit()

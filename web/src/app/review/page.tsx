@@ -42,25 +42,46 @@ export default function ReviewPage() {
 
   const currentItem = reviews[currentIndex];
 
-  // Auto-focus search input when navigating items
+  // Auto-focus search input or pre-select top AI match when navigating items
   useEffect(() => {
     if (currentItem) {
-      const desc = currentItem.payload?.raw_description || "";
-      const tokens = desc.split(" ")[0];
-      setSearchQuery(tokens);
-      const match = catalog.find((c) => desc.toLowerCase().includes(c.name.toLowerCase()));
-      if (match) {
-        setSelectedCanonicalId(match.id);
-        setPackMeasure(match.base_unit);
+      const suggestions = currentItem.payload?.suggested_matches || [];
+      if (suggestions.length > 0) {
+        const top = suggestions[0];
+        setSelectedCanonicalId(top.id);
+        setPackMeasure(top.base_unit || "kg");
+        setSearchQuery(top.name);
+      } else {
+        const desc = currentItem.payload?.raw_description || "";
+        const tokens = desc.split(" ")[0];
+        setSearchQuery(tokens);
+        const match = catalog.find((c) => desc.toLowerCase().includes(c.name.toLowerCase()));
+        if (match) {
+          setSelectedCanonicalId(match.id);
+          setPackMeasure(match.base_unit);
+        }
       }
     }
   }, [currentIndex, currentItem, catalog]);
 
-  // Global Keyboard shortcuts: Enter to resolve, 'd' to dismiss
+  // Global Keyboard shortcuts: Enter to resolve, 'd' to dismiss, '1-3' for top AI matches
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (document.activeElement?.tagName === "INPUT" && e.key !== "Enter") {
         return;
+      }
+
+      // Quick select AI suggestions via number keys [1-3]
+      if (["1", "2", "3"].includes(e.key) && currentItem?.payload?.suggested_matches) {
+        const idx = parseInt(e.key) - 1;
+        const candidate = currentItem.payload.suggested_matches[idx];
+        if (candidate) {
+          e.preventDefault();
+          setSelectedCanonicalId(candidate.id);
+          setPackMeasure(candidate.base_unit || "kg");
+          setSearchQuery(candidate.name);
+          return;
+        }
       }
 
       if (e.key === "Enter" && !resolving && currentItem && selectedCanonicalId) {
@@ -194,6 +215,55 @@ export default function ReviewPage() {
               </div>
             </div>
           </div>
+
+          {/* AI Vector Match Suggestions */}
+          {currentItem?.payload?.suggested_matches && currentItem.payload.suggested_matches.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
+                  <Sparkles className="h-3 w-3" /> AI Vector Suggestions
+                </span>
+                <span className="text-[11px] text-slate-400 dark:text-slate-500">Press [1-3] or click to select</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {currentItem.payload.suggested_matches.map((s, idx) => {
+                  const isSelected = selectedCanonicalId === s.id;
+                  const matchPct = Math.round((s.similarity || 0) * 100);
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedCanonicalId(s.id);
+                        setPackMeasure(s.base_unit || "kg");
+                        setSearchQuery(s.name);
+                      }}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        isSelected
+                          ? "border-indigo-600 bg-indigo-50/70 shadow-xs ring-1 ring-indigo-600 dark:border-indigo-400 dark:bg-indigo-950/40"
+                          : "border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-[#0e182c] dark:hover:border-slate-700"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                          [{idx + 1}]
+                        </span>
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300">
+                          {matchPct}% Match
+                        </span>
+                      </div>
+                      <div className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
+                        {s.name}
+                      </div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 capitalize">
+                        {s.category} • {s.base_unit}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Canonical Target Picker */}
           <div className="space-y-4">

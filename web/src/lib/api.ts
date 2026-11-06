@@ -79,6 +79,7 @@ export interface InvoiceSummary {
   tax?: number | null;
   total: number;
   validation_status: string;
+  pdf_url?: string | null;
 }
 
 export interface InvoiceLine {
@@ -101,6 +102,14 @@ export interface InvoiceDetail extends InvoiceSummary {
   lines: InvoiceLine[];
 }
 
+export interface SuggestedMatch {
+  id: string;
+  name: string;
+  category: string;
+  base_unit: string;
+  similarity: number;
+}
+
 export interface ReviewItem {
   id: string;
   kind: string;
@@ -112,6 +121,7 @@ export interface ReviewItem {
     supplier_sku?: string;
     pack_descriptor?: string;
     supplier_name?: string;
+    suggested_matches?: SuggestedMatch[];
     errors?: string[];
   } | null;
 }
@@ -259,6 +269,17 @@ export const api = {
     const res = await authFetch(`${API_BASE_URL}/invoices/${id}`);
     if (!res.ok) throw new Error("Failed to fetch invoice detail");
     return res.json();
+  },
+
+  async getInvoicePdfUrl(id: string): Promise<string> {
+    const res = await authFetch(`${API_BASE_URL}/invoices/${id}/pdf-url`);
+    if (!res.ok) throw new Error("Failed to get PDF URL");
+    const data = await res.json();
+    return data.url;
+  },
+
+  getDirectInvoicePdfStreamUrl(id: string): string {
+    return `${API_BASE_URL}/invoices/${id}/pdf`;
   },
 
   async deleteInvoice(id: string): Promise<{ success: boolean; message: string }> {

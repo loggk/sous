@@ -25,13 +25,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register routers
-app.include_router(invoices.router)
-app.include_router(review.router)
-app.include_router(benchmarks.router)
-app.include_router(audit.router)
-app.include_router(catalog.router)
-app.include_router(company.router)
+# Register routers (both root and /api prefixes for full client compatibility)
+for r in [
+    invoices.router,
+    review.router,
+    benchmarks.router,
+    audit.router,
+    catalog.router,
+    company.router,
+]:
+    app.include_router(r)
+    app.include_router(r, prefix="/api")
 
 
 @app.get("/health")

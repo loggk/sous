@@ -46,6 +46,7 @@ class InvoiceSummaryOut(BaseModel):
     tax: Optional[float] = None
     total: float
     validation_status: str
+    pdf_url: Optional[str] = None
 
 
 class InvoiceDetailOut(InvoiceSummaryOut):
