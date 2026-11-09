@@ -262,68 +262,96 @@ function BenchmarkContent() {
 
         {/* Right Column: Benchmark Card & Distribution (8 cols) */}
         <div className="lg:col-span-8 space-y-6">
-          {/* Controls Bar: Window Selection */}
-          <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-[#131f37]">
-            <div>
-              <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Selected Item</span>
-              <div className="text-lg font-extrabold text-[#1b2b4a] dark:text-slate-100">
-                {selectedItem?.name || "Select an item"}
-                {selectedItem && <span className="ml-1.5 text-xs text-slate-400 dark:text-slate-500 font-normal">({selectedItem.base_unit})</span>}
+          {/* Unified Controls & Market Cohort Card */}
+          <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs dark:border-slate-800 dark:bg-[#131f37]">
+            <div className="p-5 sm:p-6 space-y-5">
+              {/* Row 1: Selected Item & Audit Window */}
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                    Selected Item
+                  </span>
+                  <div className="text-lg font-extrabold text-[#1b2b4a] dark:text-slate-100">
+                    {selectedItem?.name || "Select an item"}
+                    {selectedItem && (
+                      <span className="ml-1.5 text-xs font-normal text-slate-400 dark:text-slate-500">
+                        ({selectedItem.base_unit})
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <AuditWindowControl
+                  value={windowDays}
+                  onChange={setWindowDays}
+                  label="Audit Window"
+                />
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-slate-100 dark:border-slate-800/80" />
+
+              {/* Row 2: Competitor Trade Radius */}
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Sliders className="h-4 w-4 text-[#2f4a7d] dark:text-blue-400" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                      Competitor Trade Radius
+                    </span>
+                  </div>
+                  <div className="inline-flex items-center gap-1.5 rounded-lg bg-[#f0f4fa] px-2.5 py-1 text-xs font-bold text-[#1b2b4a] dark:bg-[#1a2c4e] dark:text-blue-200">
+                    <span>{RADIUS_STOPS[sliderIndex].label}</span>
+                    <span className="font-normal text-slate-400 dark:text-slate-400">
+                      — {RADIUS_STOPS[sliderIndex].sublabel}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Range slider track */}
+                <div className="pt-2 px-1">
+                  <input
+                    type="range"
+                    min={0}
+                    max={RADIUS_STOPS.length - 1}
+                    step={1}
+                    value={sliderIndex}
+                    onChange={(e) => handleSliderChange(Number(e.target.value))}
+                    className="w-full accent-[#1b2b4a] dark:accent-blue-500 cursor-pointer h-2 bg-slate-100 dark:bg-slate-700 rounded-lg appearance-none transition-all"
+                  />
+                  <div className="flex justify-between text-[11px] text-slate-400 dark:text-slate-500 pt-2 font-mono">
+                    {RADIUS_STOPS.map((stop, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => handleSliderChange(idx)}
+                        className={`cursor-pointer transition-all hover:text-[#1b2b4a] dark:hover:text-white ${
+                          idx === sliderIndex
+                            ? "font-bold text-[#1b2b4a] dark:text-blue-400 scale-105"
+                            : "text-slate-400 dark:text-slate-500"
+                        }`}
+                      >
+                        {stop.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
 
-            <AuditWindowControl
-              value={windowDays}
-              onChange={setWindowDays}
-              label="Audit Window"
-            />
-          </div>
-
-          {/* Interactive Competitor Radius Slider */}
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-[#131f37] space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Sliders className="h-4 w-4 text-[#2f4a7d] dark:text-blue-400" />
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                  Competitor Trade Radius
-                </span>
+            {/* Row 3: Cohort & Market Area Footer Strip */}
+            {benchmark && !benchmark.suppressed && (
+              <div className={`border-t border-slate-100 bg-[#f6f8fc] px-5 py-3.5 sm:px-6 dark:border-slate-800/80 dark:bg-[#162544] transition-opacity ${loading ? "opacity-60" : ""}`}>
+                <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-medium text-[#1b2b4a] dark:text-slate-200">
+                  <div className="flex items-center gap-1.5">
+                    <Building2 className="h-4 w-4 text-[#2f4a7d] dark:text-blue-400" />
+                    <span>
+                      Calculated across <strong className="font-bold">{benchmark.n_restaurants} independent restaurants</strong>
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div className="inline-flex items-center gap-1.5 rounded-lg bg-[#f0f4fa] px-2.5 py-1 text-xs font-bold text-[#1b2b4a] dark:bg-[#1a2c4e] dark:text-blue-200">
-                <span>{RADIUS_STOPS[sliderIndex].label}</span>
-                <span className="text-slate-400 dark:text-slate-400 font-normal">
-                  — {RADIUS_STOPS[sliderIndex].sublabel}
-                </span>
-              </div>
-            </div>
-
-            {/* Range slider track */}
-            <div className="pt-2 px-1">
-              <input
-                type="range"
-                min={0}
-                max={RADIUS_STOPS.length - 1}
-                step={1}
-                value={sliderIndex}
-                onChange={(e) => handleSliderChange(Number(e.target.value))}
-                className="w-full accent-[#1b2b4a] dark:accent-blue-500 cursor-pointer h-2 bg-slate-100 dark:bg-slate-700 rounded-lg appearance-none transition-all"
-              />
-              <div className="flex justify-between text-[11px] text-slate-400 dark:text-slate-500 pt-2 font-mono">
-                {RADIUS_STOPS.map((stop, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => handleSliderChange(idx)}
-                    className={`cursor-pointer transition-all hover:text-[#1b2b4a] dark:hover:text-white ${
-                      idx === sliderIndex
-                        ? "font-bold text-[#1b2b4a] dark:text-blue-400 scale-105"
-                        : "text-slate-400 dark:text-slate-500"
-                    }`}
-                  >
-                    {stop.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+            )}
           </div>
 
           {loading ? (
@@ -381,28 +409,6 @@ function BenchmarkContent() {
           ) : (
             benchmark && (
               <div className="space-y-6">
-                {/* Cohort Label & Radius Banner */}
-                <div className="rounded-2xl border border-blue-200/60 bg-[#f6f8fc] p-4 dark:border-blue-900/40 dark:bg-[#162544]">
-                  <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-[#1b2b4a] dark:text-slate-200 font-medium">
-                    <div className="flex items-center gap-1.5">
-                      <Building2 className="h-4 w-4 text-[#2f4a7d] dark:text-blue-400" />
-                      <span>
-                        Calculated across <strong className="font-bold">{benchmark.n_restaurants} independent restaurants</strong>
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <MapPin className="h-4 w-4 text-[#2f4a7d] dark:text-blue-400" />
-                      <span>
-                        Market Area:{" "}
-                        <strong className="rounded-md bg-blue-100/70 text-[#1b2b4a] px-2 py-0.5 font-bold dark:bg-blue-900/60 dark:text-blue-100">
-                          Within {benchmark.radius_km_used} km
-                          {activeRadiusKm !== null ? ` (Target: ${activeRadiusKm} km)` : " (Auto-adapted)"}
-                        </strong>
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
                 {/* Benchmark Cards: p25 / Median / p75 */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   {/* p25 */}
@@ -482,7 +488,7 @@ function BenchmarkContent() {
                       </h3>
                     </div>
                     <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
-                      {itemHistory.length} recorded purchases
+                      {itemHistory.length === 1 ? "1 recorded purchase" : `${itemHistory.length} recorded purchases`}
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400">

@@ -313,7 +313,6 @@ export default function TeamPage() {
                   Active Team Members ({teamData?.members.length || 0})
                 </h2>
               </div>
-              <span className="text-xs text-slate-400">All members have full operator permissions</span>
             </div>
 
             {loading ? (
@@ -328,10 +327,6 @@ export default function TeamPage() {
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
                           {member.email}
-                        </span>
-                        <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
-                          <ShieldCheck className="h-3 w-3" />
-                          Full Operator Access
                         </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5 pt-1">

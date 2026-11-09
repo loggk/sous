@@ -249,18 +249,7 @@ export default function ReviewPage() {
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             Map distributor line item descriptions to universal canonical items. Confirmed mappings are permanently cached in your SKU catalog.
           </p>
-        </div>
-
-        {/* Review Queue Status Counter */}
-        <div className="flex items-center gap-3">
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-right shadow-2xs dark:border-slate-800 dark:bg-[#131f37]">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Review Queue</span>
-            <div className="text-sm font-black text-[#1b2b4a] dark:text-slate-100 flex items-center gap-1.5 justify-end font-mono">
-              <span className={`inline-block h-2 w-2 rounded-full ${reviews.length > 0 ? "bg-blue-500 animate-pulse" : "bg-emerald-500"}`} />
-              <span>{reviews.length} Pending</span>
-            </div>
-          </div>
-        </div>
+        </div>        
       </div>
 
       {loading ? (
@@ -712,17 +701,6 @@ export default function ReviewPage() {
                     <X className="h-3.5 w-3.5" />
                     <span>Dismiss Item</span>
                   </button>
-
-                  {filteredReviews.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setCurrentIndex((prev) => (prev + 1) % filteredReviews.length)}
-                      className="cursor-pointer inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors"
-                    >
-                      <SkipForward className="h-3.5 w-3.5" />
-                      <span>Skip</span>
-                    </button>
-                  )}
                 </div>
 
                 <button
