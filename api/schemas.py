@@ -131,12 +131,20 @@ class TopCostItemOut(BaseModel):
     pct_of_spend: float
 
 
+class MonthlySpendTrendOut(BaseModel):
+    month: str
+    total_spend: float
+    by_supplier: Dict[str, float] = {}
+    by_category: Dict[str, float] = {}
+
+
 class SpendSummaryOut(BaseModel):
     total_spend: float
     by_category: Dict[str, float]
     by_supplier: Dict[str, float]
     fees_total: float
     top_items: List[TopCostItemOut] = []
+    monthly_trend: List[MonthlySpendTrendOut] = []
 
 
 class RestaurantSummaryOut(BaseModel):

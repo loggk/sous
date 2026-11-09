@@ -2,8 +2,9 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { api, CanonicalItem, BenchmarkData, BenchmarkSummaryItem } from "@/lib/api";
-import { Scale, Search, ShieldCheck, AlertCircle, Info, MapPin, Building2, Sliders } from "lucide-react";
+import { api, CanonicalItem, BenchmarkData, BenchmarkSummaryItem, ItemPriceHistoryRecord } from "@/lib/api";
+import { PriceCreepLineChart } from "@/components/charts/PriceCreepLineChart";
+import { Scale, Search, ShieldCheck, AlertCircle, Info, MapPin, Building2, Sliders, TrendingUp } from "lucide-react";
 
 interface RadiusStop {
   value: number | null;
@@ -33,6 +34,7 @@ function BenchmarkContent() {
   const [searchQuery, setSearchQuery] = useState("");
   const [withDataOnly, setWithDataOnly] = useState<boolean>(true);
   const [benchmark, setBenchmark] = useState<BenchmarkData | null>(null);
+  const [itemHistory, setItemHistory] = useState<ItemPriceHistoryRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -125,6 +127,16 @@ function BenchmarkContent() {
     }
     fetchBenchmark();
   }, [selectedItemId, windowDays, activeRadiusKm]);
+
+  useEffect(() => {
+    if (!selectedItemId) {
+      setItemHistory([]);
+      return;
+    }
+    api.getItemPriceHistory(selectedItemId)
+      .then(setItemHistory)
+      .catch(() => setItemHistory([]));
+  }, [selectedItemId]);
 
   const selectedItem = items.find((i) => i.id === selectedItemId);
 
@@ -478,6 +490,34 @@ function BenchmarkContent() {
                     </div>
                   </div>
                 )}
+
+                {/* Historical Price-Creep & Benchmark Trajectory Line Chart */}
+                <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-[#131f37] space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-[#2f4a7d] dark:text-blue-400" />
+                      <h3 className="text-sm font-bold uppercase tracking-wider text-[#1b2b4a] dark:text-slate-100">
+                        Invoiced Price Trajectory vs. Regional Market Median
+                      </h3>
+                    </div>
+                    <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
+                      {itemHistory.length} recorded purchases
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Chronological line tracking your invoice purchase points against the regional peer median and interquartile corridor (p25–p75).
+                  </p>
+                  <PriceCreepLineChart
+                    history={itemHistory}
+                    baseUnit={selectedItem?.base_unit || "unit"}
+                    median={benchmark.median}
+                    p25={benchmark.p25}
+                    p75={benchmark.p75}
+                    baselineMedian={benchmark.tenant_latest_price}
+                    latestPrice={benchmark.tenant_latest_price}
+                    itemName={selectedItem?.name}
+                  />
+                </div>
 
                 {/* Crucial Comparability Notice */}
                 <div className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-500 shadow-2xs flex items-start gap-2.5 dark:border-slate-800 dark:bg-[#131f37] dark:text-slate-400">

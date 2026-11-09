@@ -11,12 +11,30 @@ export interface TopCostItem {
   pct_of_spend: number;
 }
 
+export interface MonthlySpendTrend {
+  month: string;
+  total_spend: number;
+  by_supplier: Record<string, number>;
+  by_category: Record<string, number>;
+}
+
 export interface SpendSummary {
   total_spend: number;
   by_category: Record<string, number>;
   by_supplier: Record<string, number>;
   fees_total: number;
   top_items?: TopCostItem[];
+  monthly_trend?: MonthlySpendTrend[];
+}
+
+export interface ItemPriceHistoryRecord {
+  invoice_date: string;
+  supplier_name: string;
+  item_name: string;
+  base_unit: string;
+  price_per_base_unit: number;
+  quantity: number;
+  line_total: number;
 }
 
 export interface PriceAlert {
@@ -214,6 +232,18 @@ export const api = {
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "Failed to fetch price alerts" }));
       throw new Error(err.detail || "Failed to fetch price alerts");
+    }
+    return res.json();
+  },
+
+  async getItemPriceHistory(canonicalItemId?: string): Promise<ItemPriceHistoryRecord[]> {
+    const url = canonicalItemId
+      ? `${API_BASE_URL}/audit/items?canonical_item_id=${canonicalItemId}`
+      : `${API_BASE_URL}/audit/items`;
+    const res = await authFetch(url);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Failed to fetch item price history" }));
+      throw new Error(err.detail || "Failed to fetch item price history");
     }
     return res.json();
   },

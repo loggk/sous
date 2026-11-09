@@ -2,7 +2,7 @@ import uuid
 from datetime import date, timedelta
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, desc
 
 try:
@@ -31,11 +31,17 @@ def get_spend_summary(
     start_date = date.today() - timedelta(days=days)
 
     # 1. Total spend across invoices
-    invoices = db.query(Invoice).filter(
-        Invoice.restaurant_id == restaurant_id,
-        Invoice.invoice_date >= start_date
-    ).all()
-    total_spend = sum(float(inv.total) for inv in invoices)
+    invoices = (
+        db.query(Invoice)
+        .options(joinedload(Invoice.supplier))
+        .filter(
+            Invoice.restaurant_id == restaurant_id,
+            Invoice.invoice_date >= start_date
+        )
+        .order_by(Invoice.invoice_date.asc())
+        .all()
+    )
+    total_spend = sum(float(inv.total or 0.0) for inv in invoices)
 
     # 2. Spend by Supplier
     supplier_spend_rows = (
@@ -145,12 +151,48 @@ def get_spend_summary(
             })
 
 
+    # 6. Monthly spend trajectory
+    monthly_dict: Dict[str, Dict[str, Any]] = {}
+    for inv in invoices:
+        if not inv.invoice_date:
+            continue
+        sort_key = inv.invoice_date.strftime("%Y-%m")
+        label = inv.invoice_date.strftime("%b %Y")
+        if sort_key not in monthly_dict:
+            monthly_dict[sort_key] = {
+                "month": label,
+                "total_spend": 0.0,
+                "by_supplier": {},
+                "by_category": {}
+            }
+        inv_amt = float(inv.total or 0.0)
+        monthly_dict[sort_key]["total_spend"] += inv_amt
+        sup_name = (
+            inv.supplier.canonical_name
+            if inv.supplier and inv.supplier.canonical_name
+            else (inv.supplier.name if inv.supplier else "Other Supplier")
+        )
+        monthly_dict[sort_key]["by_supplier"][sup_name] = round(
+            monthly_dict[sort_key]["by_supplier"].get(sup_name, 0.0) + inv_amt, 2
+        )
+
+    monthly_trend = [
+        {
+            "month": monthly_dict[k]["month"],
+            "total_spend": round(monthly_dict[k]["total_spend"], 2),
+            "by_supplier": monthly_dict[k]["by_supplier"],
+            "by_category": monthly_dict[k]["by_category"]
+        }
+        for k in sorted(monthly_dict.keys())
+    ]
+
     return SpendSummaryOut(
         total_spend=total_spend,
         by_category=by_category,
         by_supplier=by_supplier,
         fees_total=fees_total,
-        top_items=top_items
+        top_items=top_items,
+        monthly_trend=monthly_trend
     )
 
 
