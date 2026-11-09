@@ -18,6 +18,9 @@ except (ImportError, ValueError):
 router = APIRouter(prefix="/benchmarks", tags=["Geospatial Benchmarks"])
 
 
+VALID_AUDIT_WINDOWS = [14, 30, 60, 90, 180, 365]
+
+
 def check_contribute_to_consume_entitlement(restaurant_id: uuid.UUID, db: Session) -> bool:
     """
     Enforces contribute-to-consume:
@@ -32,7 +35,7 @@ def check_contribute_to_consume_entitlement(restaurant_id: uuid.UUID, db: Sessio
 
 @router.get("/summary", response_model=List[BenchmarkSummaryItem])
 def get_benchmarks_summary(
-    window_days: int = Query(90, description="Rolling window: only 30 or 90 days allowed"),
+    window_days: int = Query(90, description="Rolling window: standard audit windows allowed (14, 30, 60, 90, 180, 365)"),
     radius_km: Optional[int] = Query(None, description="Target radius in km (3, 5, 10, 15, 25, 50, 100) or None for auto-ladder"),
     restaurant_id: uuid.UUID = Depends(get_current_restaurant_id),
     db: Session = Depends(get_db)
@@ -42,8 +45,8 @@ def get_benchmarks_summary(
     Returns whether regional price observations meet k-anonymity privacy thresholds.
     Supports user-selected trade radius filtering.
     """
-    if window_days not in [30, 90]:
-        raise HTTPException(status_code=400, detail="window_days must be either 30 or 90.")
+    if window_days not in VALID_AUDIT_WINDOWS:
+        raise HTTPException(status_code=400, detail=f"window_days must be one of {VALID_AUDIT_WINDOWS}.")
 
     # Check contribute-to-consume entitlement
     is_entitled = check_contribute_to_consume_entitlement(restaurant_id, db)
@@ -178,7 +181,7 @@ def get_benchmarks_summary(
 @router.get("/{canonical_item_id}", response_model=BenchmarkResponse)
 def get_item_benchmark(
     canonical_item_id: uuid.UUID,
-    window_days: int = Query(30, description="Rolling window: only 30 or 90 days allowed"),
+    window_days: int = Query(90, description="Rolling window: standard audit windows allowed (14, 30, 60, 90, 180, 365)"),
     radius_km: Optional[int] = Query(None, description="Target radius in km (3, 5, 10, 15, 25, 50, 100) or None for auto-ladder"),
     restaurant_id: uuid.UUID = Depends(get_current_restaurant_id),
     db: Session = Depends(get_db)
@@ -188,8 +191,8 @@ def get_item_benchmark(
     Executes the secure get_benchmark SQL function in PostgreSQL.
     Supports user-selected trade radius filtering.
     """
-    if window_days not in [30, 90]:
-        raise HTTPException(status_code=400, detail="window_days must be either 30 or 90.")
+    if window_days not in VALID_AUDIT_WINDOWS:
+        raise HTTPException(status_code=400, detail=f"window_days must be one of {VALID_AUDIT_WINDOWS}.")
 
     # 1. Contribute-to-consume gating (Section 3.7)
     if not check_contribute_to_consume_entitlement(restaurant_id, db):

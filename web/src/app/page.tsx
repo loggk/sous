@@ -70,7 +70,7 @@ export default function DashboardPage() {
       setLoadingAlertDetail(true);
       Promise.all([
         api.getItemPriceHistory(selectedAlert.canonical_item_id).catch(() => []),
-        api.getBenchmark(selectedAlert.canonical_item_id, windowDays <= 60 ? 30 : 90).catch(() => null),
+        api.getBenchmark(selectedAlert.canonical_item_id, windowDays).catch(() => null),
       ])
         .then(([hist, bench]) => {
           setAlertHistory(hist);

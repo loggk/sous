@@ -4,7 +4,7 @@ import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { api, CanonicalItem, BenchmarkData, BenchmarkSummaryItem, ItemPriceHistoryRecord } from "@/lib/api";
 import { PriceCreepLineChart } from "@/components/charts/PriceCreepLineChart";
-import { AuditWindowControl, BENCHMARK_WINDOWS } from "@/components/AuditWindowControl";
+import { AuditWindowControl } from "@/components/AuditWindowControl";
 import { Scale, Search, ShieldCheck, AlertCircle, Info, MapPin, Building2, Sliders, TrendingUp } from "lucide-react";
 
 interface RadiusStop {
@@ -275,7 +275,6 @@ function BenchmarkContent() {
             <AuditWindowControl
               value={windowDays}
               onChange={setWindowDays}
-              options={BENCHMARK_WINDOWS}
               label="Audit Window"
             />
           </div>
