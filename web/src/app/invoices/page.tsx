@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { api, InvoiceSummary, InvoiceDetail } from "@/lib/api";
 import { UploadCloud, FileText, CheckCircle2, Clock, X, Trash2, ExternalLink } from "lucide-react";
+import { useConfirm } from "@/context/ConfirmContext";
 
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<InvoiceSummary[]>([]);
@@ -13,6 +14,7 @@ export default function InvoicesPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{ type: "success" | "warning" | "error"; message: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { confirm, alert } = useConfirm();
 
   async function loadInvoices() {
     try {
@@ -103,12 +105,23 @@ export default function InvoicesPage() {
       setSelectedInvoice(detail);
       setModalTab("lines");
     } catch (err: any) {
-      alert("Failed to load invoice details: " + err.message);
+      await alert({
+        title: "Unable to Load Invoice",
+        message: "Failed to load invoice details: " + (err.message || "Unknown error"),
+        variant: "danger",
+      });
     }
   }
 
   async function handleDeleteInvoice(invoiceId: string, name: string) {
-    if (!confirm(`Are you sure you want to delete "${name}"?`)) {
+    const confirmed = await confirm({
+      title: "Delete Invoice",
+      message: `Are you sure you want to delete "${name}"? All associated line items, price histories, and extracted data will be permanently removed.`,
+      confirmText: "Delete Invoice",
+      cancelText: "Keep Invoice",
+      variant: "danger",
+    });
+    if (!confirmed) {
       return;
     }
     try {
@@ -125,6 +138,11 @@ export default function InvoicesPage() {
       setUploadStatus({
         type: "error",
         message: err.message || "Failed to delete invoice.",
+      });
+      await alert({
+        title: "Delete Failed",
+        message: err.message || "Failed to delete invoice.",
+        variant: "danger",
       });
     }
   }

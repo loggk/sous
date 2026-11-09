@@ -3,8 +3,10 @@
 import { useEffect, useState, useRef } from "react";
 import { api, ReviewItem, CanonicalItem } from "@/lib/api";
 import { Sparkles, X, Keyboard, Search, CheckCircle2, ArrowRight } from "lucide-react";
+import { useConfirm } from "@/context/ConfirmContext";
 
 export default function ReviewPage() {
+  const { confirm, alert } = useConfirm();
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [catalog, setCatalog] = useState<CanonicalItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -115,7 +117,11 @@ export default function ReviewPage() {
         setCurrentIndex(Math.max(0, nextReviews.length - 1));
       }
     } catch (err: any) {
-      alert("Failed to resolve review item: " + err.message);
+      await alert({
+        title: "Failed to Resolve Item",
+        message: err.message || "An error occurred while resolving item mapping.",
+        variant: "danger",
+      });
     } finally {
       setResolving(false);
     }
@@ -123,6 +129,17 @@ export default function ReviewPage() {
 
   async function handleDismiss() {
     if (!currentItem) return;
+    const confirmed = await confirm({
+      title: "Dismiss Mapping",
+      message: `Are you sure you want to dismiss "${currentItem?.payload?.raw_description || "this item"}"? It will be skipped and left unmapped in benchmarks.`,
+      confirmText: "Dismiss Item",
+      cancelText: "Keep Reviewing",
+      variant: "warning",
+    });
+    if (!confirmed) {
+      return;
+    }
+
     try {
       setResolving(true);
       await api.dismissReview(currentItem.id);
@@ -132,7 +149,11 @@ export default function ReviewPage() {
         setCurrentIndex(Math.max(0, nextReviews.length - 1));
       }
     } catch (err: any) {
-      alert("Failed to dismiss review item: " + err.message);
+      await alert({
+        title: "Failed to Dismiss Item",
+        message: err.message || "An error occurred while dismissing the item.",
+        variant: "danger",
+      });
     } finally {
       setResolving(false);
     }

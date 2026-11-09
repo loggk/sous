@@ -25,8 +25,10 @@ import {
   TeamInvitation,
   RestaurantSummary,
 } from "@/lib/api";
+import { useConfirm } from "@/context/ConfirmContext";
 
 export default function TeamPage() {
+  const { confirm, alert } = useConfirm();
   const [company, setCompany] = useState<Company | null>(null);
   const [teamData, setTeamData] = useState<TeamData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -129,7 +131,14 @@ export default function TeamPage() {
 
   // Handle Remove Member
   const handleRemoveMember = async (member: TeamMember) => {
-    if (!confirm(`Are you sure you want to remove ${member.email} from the company?`)) {
+    const confirmed = await confirm({
+      title: "Remove Team Member",
+      message: `Are you sure you want to remove ${member.email} from the company? They will immediately lose access to all locations.`,
+      confirmText: "Remove Member",
+      cancelText: "Cancel",
+      variant: "danger",
+    });
+    if (!confirmed) {
       return;
     }
     try {
@@ -144,6 +153,16 @@ export default function TeamPage() {
 
   // Handle Cancel Invite
   const handleCancelInvite = async (invite: TeamInvitation) => {
+    const confirmed = await confirm({
+      title: "Cancel Invitation",
+      message: `Are you sure you want to cancel the invitation sent to ${invite.email}?`,
+      confirmText: "Cancel Invite",
+      cancelText: "Keep Invite",
+      variant: "warning",
+    });
+    if (!confirmed) {
+      return;
+    }
     try {
       setActionError(null);
       await api.cancelInvitation(invite.id);
