@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { api, CanonicalItem, BenchmarkData, BenchmarkSummaryItem, ItemPriceHistoryRecord } from "@/lib/api";
 import { PriceCreepLineChart } from "@/components/charts/PriceCreepLineChart";
+import { AuditWindowControl, BENCHMARK_WINDOWS } from "@/components/AuditWindowControl";
 import { Scale, Search, ShieldCheck, AlertCircle, Info, MapPin, Building2, Sliders, TrendingUp } from "lucide-react";
 
 interface RadiusStop {
@@ -271,31 +272,12 @@ function BenchmarkContent() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2.5">
-              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Rolling Window:</span>
-              <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-[#0e182c]">
-                <button
-                  onClick={() => setWindowDays(30)}
-                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-                    windowDays === 30
-                      ? "bg-[#1b2b4a] text-white shadow-xs dark:bg-blue-600"
-                      : "text-slate-600 hover:text-[#1b2b4a] dark:text-slate-400 dark:hover:text-white"
-                  }`}
-                >
-                  30 Days
-                </button>
-                <button
-                  onClick={() => setWindowDays(90)}
-                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-                    windowDays === 90
-                      ? "bg-[#1b2b4a] text-white shadow-xs dark:bg-blue-600"
-                      : "text-slate-600 hover:text-[#1b2b4a] dark:text-slate-400 dark:hover:text-white"
-                  }`}
-                >
-                  90 Days
-                </button>
-              </div>
-            </div>
+            <AuditWindowControl
+              value={windowDays}
+              onChange={setWindowDays}
+              options={BENCHMARK_WINDOWS}
+              label="Audit Window"
+            />
           </div>
 
           {/* Interactive Competitor Radius Slider */}

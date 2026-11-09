@@ -22,6 +22,7 @@ import {
   FileSpreadsheet,
   ExternalLink,
 } from "lucide-react";
+import { AuditWindowControl } from "@/components/AuditWindowControl";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -69,7 +70,7 @@ export default function DashboardPage() {
       setLoadingAlertDetail(true);
       Promise.all([
         api.getItemPriceHistory(selectedAlert.canonical_item_id).catch(() => []),
-        api.getBenchmark(selectedAlert.canonical_item_id, windowDays).catch(() => null),
+        api.getBenchmark(selectedAlert.canonical_item_id, windowDays <= 60 ? 30 : 90).catch(() => null),
       ])
         .then(([hist, bench]) => {
           setAlertHistory(hist);
@@ -122,25 +123,12 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* Rolling Window Selector */}
-        <div className="flex items-center gap-2.5">
-          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Audit Window:</span>
-          <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-[#0e182c]">
-            {[30, 90, 180, 365].map((days) => (
-              <button
-                key={days}
-                onClick={() => setWindowDays(days)}
-                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-                  windowDays === days
-                    ? "bg-[#1b2b4a] text-white shadow-xs dark:bg-blue-600"
-                    : "text-slate-600 hover:text-[#1b2b4a] dark:text-slate-400 dark:hover:text-white"
-                }`}
-              >
-                {days === 365 ? "1 Year" : `${days} Days`}
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* Audit Window Selector / Slider */}
+        <AuditWindowControl
+          value={windowDays}
+          onChange={setWindowDays}
+          label="Audit Window"
+        />
       </div>
 
       {/* 3 Executive Financial Scorecards */}
