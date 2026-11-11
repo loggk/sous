@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { api, SpendSummary, PriceAlert, ItemPriceHistoryRecord, BenchmarkData } from "@/lib/api";
+import { api, SpendSummary, PriceAlert, ItemPriceHistoryRecord, BenchmarkData, API_BASE_URL } from "@/lib/api";
 import { SpendTrajectoryChart } from "@/components/charts/SpendTrajectoryChart";
 import { PriceCreepLineChart } from "@/components/charts/PriceCreepLineChart";
 import { AlertTriangle, ArrowUpRight, CheckCircle2, ShieldAlert, X } from "lucide-react";
@@ -105,7 +105,7 @@ export default function DashboardPage() {
         </h3>
         <p className="mt-2 text-sm">{error}</p>
         <p className="mt-4 rounded bg-chip p-2 font-mono text-xs text-ink-soft">
-          Check that the API is running on http://localhost:8000
+          API Target: {API_BASE_URL}
         </p>
       </div>
     );

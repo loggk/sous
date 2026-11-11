@@ -404,6 +404,78 @@ def generate_all():
         "573.00",
     )
 
+    # Invoice 7: Sysco GTA Meats, Deli & Burger Bar Staples (Recent: Nov 08, 2026)
+    make_invoice(
+        "test_invoices/07_sysco_meats_and_deli.pdf",
+        "SYSCO TORONTO",
+        "Sysco Canada Inc. &bull; Toronto OpCo<br/>21 Progress Ave, Scarborough, ON M1P 2Y7<br/>GST/HST: 104928172 RT0001",
+        "#0f3d64",
+        "SYS-9841022",
+        "Nov 08, 2026",
+        "Nov 09, 2026",
+        "8472910",
+        "<b>Route:</b> 14-DOWNTOWN<br/><b>Stop:</b> 08<br/><b>Driver:</b> M. Kowalski<br/><b>Cases:</b> 14",
+        [
+            ("1", "SYS-88110", "Ground Beef 80/20 Chuck Blend", "10kg", "3", "98.00", "294.00"),
+            ("2", "SYS-88125", "Bacon Smoked Regular Slices", "5kg", "4", "52.50", "210.00"),
+            ("3", "SYS-21048", "Cheddar Cheese Mild Slices", "4x2.5kg", "2", "125.00", "250.00"),
+            ("4", "SYS-33040", "Brioche Burger Buns 4-inch", "48ct", "3", "31.20", "93.60"),
+            ("5", "SYS-50240", "Mayonnaise Heavy Duty Bulk", "16L", "1", "60.80", "60.80"),
+            ("6", "SYS-90001", "Broadline Delivery Fuel Surcharge", "EA", "1", "8.50", "8.50"),
+        ],
+        "908.40",
+        "8.50",
+        "916.90",
+    )
+
+    # Invoice 8: Gordon Food Service (GFS) Produce, Peppers & Condiments (Recent: Nov 09, 2026)
+    make_invoice(
+        "test_invoices/08_gfs_fresh_produce_and_sauces.pdf",
+        "GORDON FOOD SERVICE",
+        "Gordon Food Service Canada Ltd. &bull; Ontario DC<br/>5555 GFS Way, Milton, ON L9T 6Z5<br/>GST/HST: 123984719 RT0001",
+        "#b81414",
+        "GFS-8492015",
+        "Nov 09, 2026",
+        "Nov 10, 2026",
+        "GFS-91824",
+        "<b>Route:</b> GFS-TOR-4<br/><b>Stop:</b> 11<br/><b>Driver:</b> T. Henderson<br/><b>Cases:</b> 15",
+        [
+            ("1", "GFS-10493", "Beefsteak Tomatoes 20lb CS", "20lb", "3", "31.00", "93.00"),
+            ("2", "GFS-10510", "Red Bell Peppers 11lb CS", "11lb", "2", "22.50", "45.00"),
+            ("3", "GFS-10520", "White Button Mushrooms 10lb CS", "10lb", "3", "25.50", "76.50"),
+            ("4", "GFS-50222", "Canned Crushed Tomatoes #10", "6x3kg", "5", "43.20", "216.00"),
+            ("5", "GFS-50250", "Dill Pickle Crinkle Slices 4x4L", "4x4L", "2", "43.20", "86.40"),
+            ("6", "GFS-90002", "Fuel and Environmental Surcharge", "EA", "1", "8.75", "8.75"),
+        ],
+        "516.90",
+        "8.75",
+        "525.65",
+    )
+
+    # Invoice 9: Flanagan Foodservice Specialty Cheeses, Fresh Greens & Herbs (Recent: Nov 10, 2026)
+    make_invoice(
+        "test_invoices/09_flanagan_artisan_dairy_and_bakery.pdf",
+        "FLANAGAN FOODSERVICE",
+        "Flanagan Foodservice Inc. &bull; Kitchener/GTA DC<br/>100 Lackner Place, Kitchener, ON N2E 4A8<br/>GST/HST: 101893714 RT0001",
+        "#1e4c27",
+        "FLA-9831044",
+        "Nov 10, 2026",
+        "Nov 11, 2026",
+        "FLA-38192",
+        "<b>Route:</b> FL-WEST-07<br/><b>Stop:</b> 05<br/><b>Driver:</b> D. Campbell<br/><b>Cases:</b> 13",
+        [
+            ("1", "FLA-21046", "Mozzarella Ball Fresh (Fior di Latte)", "6x1kg", "3", "85.20", "255.60"),
+            ("2", "FLA-21059", "Ricotta Cheese Traditional 4x2kg", "4x2kg", "2", "62.40", "124.80"),
+            ("3", "FLA-10485", "Baby Spinach 4x2.5lb CS", "10lb", "2", "29.50", "59.00"),
+            ("4", "FLA-10487", "Arugula (Rocket) 4x2lb CS", "8lb", "2", "28.30", "56.60"),
+            ("5", "FLA-10490", "Fresh Parsley Italian Flat 30ct", "30ct", "1", "26.00", "26.00"),
+            ("6", "FLA-90003", "Broadline Split Case & Fuel Fee", "EA", "1", "7.75", "7.75"),
+        ],
+        "522.00",
+        "7.75",
+        "529.75",
+    )
+
 
 if __name__ == "__main__":
     generate_all()
