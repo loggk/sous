@@ -156,21 +156,6 @@ export default function LoginPage() {
             pooled from independent operators and never attributed to anyone by name.
           </p>
         </div>
-
-        <dl className="flex flex-wrap gap-x-9 gap-y-4 border-t border-ramp-5/30 pt-5">
-          <div>
-            <dt className="num font-display text-[22px] font-bold text-on-ink">6+</dt>
-            <dd className="mt-0.5 text-xs text-ramp-5">kitchens before a benchmark shows</dd>
-          </div>
-          <div>
-            <dt className="num font-display text-[22px] font-bold text-on-ink">35%</dt>
-            <dd className="mt-0.5 text-xs text-ramp-5">cap on any one kitchen&rsquo;s share</dd>
-          </div>
-          <div>
-            <dt className="font-display text-[22px] font-bold text-on-ink">Never</dt>
-            <dd className="mt-0.5 text-xs text-ramp-5">a named restaurant&rsquo;s price</dd>
-          </div>
-        </dl>
       </div>
 
       {/* The form */}
