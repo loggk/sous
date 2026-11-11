@@ -155,7 +155,7 @@ export default function DashboardPage() {
             <div className="flex-[0_1_300px]">
               <span className="label-caps">Where it sits</span>
               <dl className="mt-3 space-y-2.5">
-                {alerts.slice(0, 3).map((alert) => (
+                {alerts.slice(0, 5).map((alert) => (
                   <div key={alert.canonical_item_id} className="flex items-baseline justify-between gap-4">
                     <dt className="truncate text-sm text-ink-soft">{alert.item_name}</dt>
                     <dd className="num shrink-0 text-sm font-semibold text-ink">
@@ -163,6 +163,21 @@ export default function DashboardPage() {
                     </dd>
                   </div>
                 ))}
+                {alerts.length > 5 && (
+                  <div className="flex items-baseline justify-between gap-4 border-t border-rule-soft pt-2.5">
+                    <dt className="truncate text-sm text-ink-muted">
+                      and {alerts.length - 5} more
+                    </dt>
+                    <dd className="num shrink-0 text-sm font-semibold text-ink">
+                      +$
+                      {money(
+                        alerts
+                          .slice(5)
+                          .reduce((acc, a) => acc + (a.estimated_dollar_impact || 0), 0)
+                      )}
+                    </dd>
+                  </div>
+                )}
               </dl>
             </div>
           </>

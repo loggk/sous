@@ -360,7 +360,7 @@ function BenchmarkContent() {
             </label>
           </div>
 
-          <div className="mt-4 border-t border-rule">
+          <div className="mt-4 max-h-[560px] overflow-y-auto border-t border-rule">
             {filteredItems.length === 0 ? (
               <div className="py-10 text-center">
                 <p className="text-xs text-ink-muted">Nothing matches that.</p>

@@ -155,8 +155,6 @@ export default function InvoicesPage() {
     new Set(invoices.map((i) => i.supplier_name).filter((s): s is string => Boolean(s)))
   ).sort();
 
-  const needsAttention = invoices.filter((i) => i.validation_status !== "passed").length;
-
   const filtered = invoices.filter((inv) => {
     if (statusFilter === "passed" && inv.validation_status !== "passed") return false;
     if (statusFilter === "attention" && inv.validation_status === "passed") return false;
@@ -188,9 +186,9 @@ export default function InvoicesPage() {
         </p>
       </div>
 
-      {/* Drop zone and the state of the pile */}
-      <section className="section-open section-close flex flex-wrap items-stretch gap-8 py-7">
-        <div className="min-w-0 flex-[999_1_440px]">
+      {/* Drop zone */}
+      <section className="section-open section-close py-7">
+        <div className="min-w-0">
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -224,23 +222,6 @@ export default function InvoicesPage() {
               Duplicates are caught by content hash before anything is filed twice
             </span>
           </button>
-        </div>
-
-        <div className="flex min-w-0 max-w-[360px] flex-[1_1_280px] flex-col justify-center">
-          <div className="flex items-baseline justify-between gap-3 border-b border-rule-soft py-3">
-            <span className="text-[13px] text-ink-soft">Filed</span>
-            <span className="num display-sm text-lg">{invoices.length}</span>
-          </div>
-          <div className="flex items-baseline justify-between gap-3 border-b border-rule-soft py-3">
-            <span className="text-[13px] text-ink-soft">Suppliers</span>
-            <span className="num display-sm text-lg">{suppliers.length}</span>
-          </div>
-          <div className="flex items-baseline justify-between gap-3 py-3">
-            <span className="text-[13px] text-ink-soft">Needs a look</span>
-            <span className={`num display-sm text-lg ${needsAttention > 0 ? "text-over-ink" : ""}`}>
-              {needsAttention}
-            </span>
-          </div>
         </div>
       </section>
 
