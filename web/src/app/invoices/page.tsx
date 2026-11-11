@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { api, InvoiceSummary, InvoiceDetail } from "@/lib/api";
-import { CheckCircle2, Clock, FileText, UploadCloud, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, Clock, FileText, UploadCloud, X } from "lucide-react";
 import { useConfirm } from "@/context/ConfirmContext";
 
 function money(value: number, decimals = 2) {
@@ -295,19 +295,22 @@ export default function InvoicesPage() {
             <label htmlFor="inv-supplier" className="label-caps block pb-2">
               Supplier
             </label>
-            <select
-              id="inv-supplier"
-              value={supplierFilter}
-              onChange={(e) => setSupplierFilter(e.target.value)}
-              className="min-h-11 cursor-pointer rounded-full border border-edge bg-panel px-4 text-sm text-ink"
-            >
-              <option value="all">All {suppliers.length} suppliers</option>
-              {suppliers.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                id="inv-supplier"
+                value={supplierFilter}
+                onChange={(e) => setSupplierFilter(e.target.value)}
+                className="min-h-11 w-full cursor-pointer appearance-none rounded-full border border-edge bg-panel py-2 pl-4 pr-11 text-sm text-ink outline-none focus:border-accent"
+              >
+                <option value="all">All {suppliers.length} suppliers</option>
+                {suppliers.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" />
+            </div>
           </div>
         )}
       </section>

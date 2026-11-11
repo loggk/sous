@@ -613,19 +613,22 @@ export default function ReviewPage() {
                       <label htmlFor="pk-measure" className="block pb-2 text-xs font-semibold text-ink-soft">
                         Measured in
                       </label>
-                      <select
-                        id="pk-measure"
-                        value={packMeasure}
-                        onChange={(e) => setPackMeasure(e.target.value)}
-                        className="h-11 w-full cursor-pointer rounded border border-edge bg-panel px-3 text-[15px] font-semibold text-ink outline-none focus:border-accent"
-                      >
-                        <option value="kg">kg</option>
-                        <option value="L">L</option>
-                        <option value="each">each</option>
-                        <option value="lb">lb</option>
-                        <option value="ml">ml</option>
-                        <option value="g">g</option>
-                      </select>
+                      <div className="relative">
+                        <select
+                          id="pk-measure"
+                          value={packMeasure}
+                          onChange={(e) => setPackMeasure(e.target.value)}
+                          className="h-11 w-full cursor-pointer appearance-none rounded border border-edge bg-panel pl-3.5 pr-10 text-[15px] font-semibold text-ink outline-none focus:border-accent"
+                        >
+                          <option value="kg">kg</option>
+                          <option value="L">L</option>
+                          <option value="each">each</option>
+                          <option value="lb">lb</option>
+                          <option value="ml">ml</option>
+                          <option value="g">g</option>
+                        </select>
+                        <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" />
+                      </div>
                     </div>
                   </div>
 
