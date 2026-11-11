@@ -3,24 +3,7 @@
 import { useEffect, useState, useRef, useMemo } from "react";
 import Link from "next/link";
 import { api, ReviewItem, CanonicalItem } from "@/lib/api";
-import {
-  Sparkles,
-  X,
-  Search,
-  CheckCircle2,
-  ArrowRight,
-  Package,
-  Building2,
-  Tag,
-  Check,
-  ChevronRight,
-  Filter,
-  Layers,
-  SkipForward,
-  CornerDownLeft,
-  Scale,
-  UploadCloud,
-} from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
 import { useConfirm } from "@/context/ConfirmContext";
 
 export default function ReviewPage() {
@@ -166,8 +149,6 @@ export default function ReviewPage() {
     }
   }, [currentIndex, currentItem, catalog]);
 
-  // Global keyboard shortcuts removed per user directive; all interactions are button-driven.
-
   async function handleResolve() {
     if (!currentItem || !selectedCanonicalId) return;
     try {
@@ -187,8 +168,8 @@ export default function ReviewPage() {
       }
     } catch (err: any) {
       await alert({
-        title: "Failed to Resolve Item",
-        message: err.message || "An error occurred while resolving item mapping.",
+        title: "Couldn't save that mapping",
+        message: err.message || "Something went wrong while saving.",
         variant: "danger",
       });
     } finally {
@@ -199,15 +180,13 @@ export default function ReviewPage() {
   async function handleDismiss() {
     if (!currentItem) return;
     const confirmed = await confirm({
-      title: "Dismiss Mapping",
-      message: `Are you sure you want to dismiss "${currentItem?.payload?.raw_description || "this item"}"? It will be skipped and left unmapped in benchmarks.`,
-      confirmText: "Dismiss Item",
-      cancelText: "Keep Reviewing",
+      title: "Skip this line?",
+      message: `“${currentItem?.payload?.raw_description || "This item"}” stays unmapped, so it won't count towards your categories or benchmarks.`,
+      confirmText: "Skip it",
+      cancelText: "Keep reviewing",
       variant: "warning",
     });
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
     try {
       setResolving(true);
@@ -219,8 +198,8 @@ export default function ReviewPage() {
       }
     } catch (err: any) {
       await alert({
-        title: "Failed to Dismiss Item",
-        message: err.message || "An error occurred while dismissing the item.",
+        title: "Couldn't skip that line",
+        message: err.message || "Something went wrong.",
         variant: "danger",
       });
     } finally {
@@ -235,384 +214,280 @@ export default function ReviewPage() {
     c.category.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const suggestions = currentItem?.payload?.suggested_matches || [];
+  const caseTotal = packUnits * packSize;
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-2 border-b border-slate-200/60 dark:border-slate-800">
-        <div>
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-[#f0f4fa] px-3 py-1 text-xs font-semibold text-[#2f4a7d] dark:bg-[#1a2c4e] dark:text-blue-300">
-            <Sparkles className="h-3.5 w-3.5" /> Human-in-the-Loop Mapping
-          </div>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight text-[#1b2b4a] dark:text-slate-100 sm:text-3xl">
-            Item Mapping Review
-          </h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Map distributor line item descriptions to universal canonical items. Confirmed mappings are permanently cached in your SKU catalog.
-          </p>
-        </div>        
+    <div>
+      {/* Page head */}
+      <div className="pb-7">
+        <span className="eyebrow">Your call, not the machine&rsquo;s</span>
+        <h1 className="display-xl mt-2 text-4xl sm:text-[46px]">Item Mapping</h1>
+        <p className="mt-2.5 max-w-2xl text-sm leading-relaxed text-ink-soft">
+          Suppliers write the same ingredient a dozen different ways. Confirm what each line really
+          is once, and Sous remembers it for every invoice after.
+        </p>
       </div>
 
       {loading ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center shadow-xs dark:border-slate-800 dark:bg-[#131f37]">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-[#2f4a7d] dark:border-blue-400 border-t-transparent" />
-          <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Loading review queue...</p>
+        <div className="section-open py-16 text-center">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+          <p className="mt-3 text-sm text-ink-soft">Loading the queue…</p>
         </div>
       ) : reviews.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center shadow-xs space-y-4 dark:border-slate-800 dark:bg-[#131f37]">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
-            <CheckCircle2 className="h-8 w-8" />
-          </div>
-          <div>
-            <h3 className="text-lg font-bold text-[#1b2b4a] dark:text-slate-100">
-              Review Queue Clean & Up-to-Date
-            </h3>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-              All invoice line items have been mapped to canonical catalog ingredients. Newly uploaded broadline invoices requiring verification will automatically appear here.
-            </p>
-          </div>
-          <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
-            <Link
-              href="/benchmarks"
-              className="inline-flex items-center gap-2 rounded-xl bg-[#1b2b4a] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#2f4a7d] dark:bg-blue-600 dark:hover:bg-blue-500 transition-colors"
-            >
-              <Scale className="h-3.5 w-3.5" />
-              <span>View Local Benchmarks</span>
+        <div className="section-open pt-8">
+          <CheckCircle2 className="h-8 w-8 text-under" />
+          <h2 className="display-xl mt-4 text-3xl">Nothing left to confirm</h2>
+          <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-ink-soft">
+            Every invoice line is mapped to a catalogue ingredient. Anything new that needs your eye
+            will turn up here on its own.
+          </p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link href="/benchmarks" className="pill-primary no-underline">
+              See your benchmarks
             </Link>
-            <Link
-              href="/invoices"
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0e182c] dark:text-slate-200 dark:hover:bg-slate-800 transition-colors"
-            >
-              <UploadCloud className="h-3.5 w-3.5" />
-              <span>Upload New Invoice</span>
+            <Link href="/invoices" className="pill-secondary no-underline">
+              Upload an invoice
             </Link>
           </div>
         </div>
       ) : (
-        /* Split-Pane Master-Detail (Option 1) */
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-start">
-          {/* Left Column: Master Queue List (5 cols) */}
-          <div className="lg:col-span-5 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-[#131f37] space-y-3">
-            {/* Queue Filter Bar */}
-            <div className="space-y-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
-                <input
-                  type="text"
-                  placeholder="Filter queue items or SKU..."
-                  value={queueFilter}
-                  onChange={(e) => setQueueFilter(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 pl-8.5 pr-3 py-1.5 text-xs outline-none transition-colors focus:border-[#2f4a7d] focus:bg-white dark:border-slate-700 dark:bg-[#0e182c] dark:text-slate-100 dark:focus:border-blue-400 placeholder-slate-400"
-                />
+        <>
+          {/* What's at stake */}
+          <section className="section-open section-close flex flex-wrap items-center justify-between gap-8 py-7">
+            <div className="min-w-0 flex-[1_1_480px]">
+              <p className="display-sm max-w-2xl text-[25px] leading-snug">
+                {reviews.length} {reviews.length === 1 ? "line is" : "lines are"} waiting. Until they
+                are mapped they sit outside your category totals and benchmarks.
+              </p>
+              <p className="mt-3 text-sm text-ink-soft">
+                Most take one click &mdash; the top suggestion is usually the right one.
+              </p>
+            </div>
+            <div className="flex-[0_1_260px]">
+              <span className="label-caps">In the queue</span>
+              <div className="num display-xl mt-1.5 text-4xl">{reviews.length}</div>
+              <p className="mt-1.5 text-xs text-ink-muted">
+                {catalog.length} ingredients in the catalogue to match against
+              </p>
+            </div>
+          </section>
+
+          <section className="flex flex-wrap items-start gap-11 pt-8">
+            {/* Queue */}
+            <div className="min-w-0 max-w-[400px] flex-[1_1_320px]">
+              <div className="flex items-baseline justify-between gap-3">
+                <h2 className="display-sm text-base">The queue</h2>
+                <span className="text-xs text-ink-muted">{filteredReviews.length} shown</span>
               </div>
 
-              {/* Supplier Filter Chips (if multiple suppliers) */}
+              <label htmlFor="q-filter" className="label-caps mt-3.5 block pb-2">
+                Filter
+              </label>
+              <input
+                id="q-filter"
+                type="search"
+                value={queueFilter}
+                onChange={(e) => {
+                  setQueueFilter(e.target.value);
+                  setCurrentIndex(0);
+                }}
+                placeholder="Description or supplier SKU"
+                className="field"
+              />
+
               {queueSuppliers.length > 1 && (
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px]">
+                <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => setSupplierFilter("all")}
-                    className={`cursor-pointer px-2 py-0.5 rounded-md font-semibold whitespace-nowrap transition-colors ${
+                    onClick={() => {
+                      setSupplierFilter("all");
+                      setCurrentIndex(0);
+                    }}
+                    className={`min-h-9 cursor-pointer rounded-full px-3 text-xs transition-colors ${
                       supplierFilter === "all"
-                        ? "bg-[#1b2b4a] text-white dark:bg-blue-600"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400"
+                        ? "border border-ink bg-ink font-bold text-on-ink"
+                        : "border border-edge font-semibold text-ink-soft hover:text-ink"
                     }`}
                   >
-                    All ({reviews.length})
+                    All suppliers
                   </button>
-                  {queueSuppliers.map((supp) => (
+                  {queueSuppliers.map((s) => (
                     <button
-                      key={supp}
+                      key={s}
                       type="button"
-                      onClick={() => setSupplierFilter(supp.toLowerCase())}
-                      className={`cursor-pointer px-2 py-0.5 rounded-md font-semibold whitespace-nowrap transition-colors ${
-                        supplierFilter === supp.toLowerCase()
-                          ? "bg-[#1b2b4a] text-white dark:bg-blue-600"
-                          : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400"
+                      onClick={() => {
+                        setSupplierFilter(s);
+                        setCurrentIndex(0);
+                      }}
+                      className={`min-h-9 cursor-pointer rounded-full px-3 text-xs transition-colors ${
+                        supplierFilter === s
+                          ? "border border-ink bg-ink font-bold text-on-ink"
+                          : "border border-edge font-semibold text-ink-soft hover:text-ink"
                       }`}
                     >
-                      {supp}
+                      {s}
                     </button>
                   ))}
                 </div>
               )}
-            </div>
 
-            {/* Queue Summary Header */}
-            <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 dark:text-slate-500 px-1 pt-1 border-t border-slate-100 dark:border-slate-800">
-              <span>{filteredReviews.length} ITEMS TO REVIEW</span>
-            </div>
-
-            {/* Scrollable Queue List */}
-            <div className="max-h-[580px] overflow-y-auto space-y-2 pr-1">
-              {filteredReviews.length === 0 ? (
-                <div className="py-8 text-center text-xs text-slate-400 dark:text-slate-500">
-                  No queue items match your filter.
-                </div>
-              ) : (
-                filteredReviews.map((item, idx) => {
-                  const isSelected = item.id === currentItem?.id;
-                  const suggestions = item.payload?.suggested_matches || [];
-                  const topSuggestion = suggestions[0];
-                  const matchPct = topSuggestion ? Math.round((topSuggestion.similarity || 0) * 100) : 0;
-
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setCurrentIndex(idx)}
-                      className={`cursor-pointer w-full text-left p-3.5 rounded-xl border transition-all relative ${
-                        isSelected
-                          ? "border-[#2f4a7d] bg-[#f0f4fa] shadow-xs ring-1 ring-[#2f4a7d] dark:border-blue-400 dark:bg-[#162544] dark:ring-blue-400"
-                          : "border-slate-200/80 bg-white hover:border-slate-300 hover:bg-slate-50/70 dark:border-slate-800 dark:bg-[#0e182c] dark:hover:border-slate-700"
-                      }`}
-                    >
-                      {/* Top Row: Supplier & Match Pill */}
-                      <div className="flex items-center justify-between gap-2 mb-1.5">
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5">
-                          <Building2 className="h-3 w-3 text-slate-400" />
-                          <span className="truncate max-w-[120px]">{item.payload?.supplier_name || "Supplier"}</span>
-                        </span>
-
-                        {topSuggestion ? (
+              <div className="mt-5 border-t border-rule">
+                {filteredReviews.length === 0 ? (
+                  <p className="py-10 text-center text-xs text-ink-muted">Nothing matches that.</p>
+                ) : (
+                  filteredReviews.map((item, idx) => {
+                    const isCurrent = idx === currentIndex;
+                    const topMatch = item.payload?.suggested_matches?.[0];
+                    const confidence = topMatch ? Math.round((topMatch.similarity || 0) * 100) : null;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setCurrentIndex(idx)}
+                        className={`block w-full border-b border-rule-soft py-3.5 text-left transition-colors hover:bg-panel ${
+                          isCurrent ? "border-l-[3px] border-l-ink bg-panel pl-3.5" : "pl-[3px]"
+                        }`}
+                      >
+                        <span className="flex items-baseline justify-between gap-3">
                           <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                              matchPct >= 85
-                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
-                                : matchPct >= 70
-                                ? "bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800"
-                                : "bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                            className={`truncate text-[13.5px] ${
+                              isCurrent ? "font-bold text-ink" : "font-semibold text-ink"
                             }`}
                           >
-                            {matchPct}% Match
+                            {item.payload?.raw_description || "Unknown line"}
                           </span>
-                        ) : (
-                          <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500">
-                            Manual search
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Raw Description */}
-                      <div className="text-xs font-bold text-[#1b2b4a] dark:text-slate-100 line-clamp-1">
-                        {item.payload?.raw_description || "Unknown item"}
-                      </div>
-
-                      {/* Target Preview & SKU */}
-                      <div className="mt-1.5 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
-                        <span className="truncate pr-2 font-medium text-slate-600 dark:text-slate-300">
-                          {topSuggestion ? `→ ${topSuggestion.name}` : "Requires selection"}
+                          {confidence !== null && (
+                            <span
+                              className={`num shrink-0 text-xs font-bold ${
+                                confidence >= 85 ? "text-under-ink" : "text-over-ink"
+                              }`}
+                            >
+                              {confidence}% sure
+                            </span>
+                          )}
                         </span>
-                        {item.payload?.pack_descriptor && (
-                          <span className="font-mono text-[10px] shrink-0 text-slate-400 dark:text-slate-500">
-                            {item.payload.pack_descriptor}
-                          </span>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })
-              )}
+                        <span className="mt-0.5 block truncate text-[11.5px] text-ink-muted">
+                          {item.payload?.supplier_name || "Unknown supplier"}
+                          {item.payload?.supplier_sku ? ` · SKU ${item.payload.supplier_sku}` : ""}
+                        </span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
             </div>
-          </div>
 
-          {/* Right Column: Focused Mapping Canvas (7 cols) */}
-          {currentItem && (
-            <div className="lg:col-span-7 rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs dark:border-slate-800 dark:bg-[#131f37] space-y-6">
-              {/* Item Header Banner */}
-              <div className="pb-4 border-b border-slate-100 dark:border-slate-800 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                    RAW INVOICE LINE ITEM ({currentIndex + 1} of {filteredReviews.length})
+            {/* Mapping panel */}
+            {currentItem && (
+              <div className="min-w-0 flex-[999_1_540px]">
+                <div className="section-open flex flex-wrap items-center justify-between gap-3 pt-5">
+                  <span className="label-caps">
+                    Line {currentIndex + 1} of {filteredReviews.length} · as printed on the invoice
                   </span>
-                  <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                  <span className="flex gap-2">
                     <button
                       type="button"
+                      aria-label="Previous line"
                       disabled={currentIndex === 0}
                       onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
-                      className="p-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 cursor-pointer"
-                      title="Previous item"
+                      className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-edge text-ink transition-colors hover:bg-panel disabled:cursor-not-allowed disabled:opacity-30"
                     >
-                      ▲
+                      <ChevronUp className="h-4 w-4" />
                     </button>
                     <button
                       type="button"
+                      aria-label="Next line"
                       disabled={currentIndex >= filteredReviews.length - 1}
-                      onClick={() => setCurrentIndex((prev) => Math.min(filteredReviews.length - 1, prev + 1))}
-                      className="p-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 cursor-pointer"
-                      title="Next item"
+                      onClick={() =>
+                        setCurrentIndex((prev) => Math.min(filteredReviews.length - 1, prev + 1))
+                      }
+                      className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-edge text-ink transition-colors hover:bg-panel disabled:cursor-not-allowed disabled:opacity-30"
                     >
-                      ▼
+                      <ChevronDown className="h-4 w-4" />
                     </button>
-                  </div>
+                  </span>
                 </div>
 
-                <div className="text-lg sm:text-xl font-black text-[#1b2b4a] dark:text-slate-100">
+                <h2 className="display-xl mt-3 text-2xl leading-tight sm:text-[32px]">
                   {currentItem.payload?.raw_description || "Unknown item"}
-                </div>
+                </h2>
 
-                {/* Metadata Pills */}
-                <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-                  <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-slate-800 px-2.5 py-1 text-slate-700 dark:text-slate-300 font-medium">
-                    <Building2 className="h-3.5 w-3.5 text-slate-400" />
-                    Supplier: <strong>{currentItem.payload?.supplier_name || "Sysco"}</strong>
+                <div className="mt-3.5 flex flex-wrap gap-2">
+                  <span className="rounded-sm bg-chip px-2.5 py-1.5 text-[12.5px] text-ink">
+                    Supplier{" "}
+                    <strong className="font-semibold">
+                      {currentItem.payload?.supplier_name || "unknown"}
+                    </strong>
                   </span>
                   {currentItem.payload?.supplier_sku && (
-                    <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-slate-800 px-2.5 py-1 text-slate-700 dark:text-slate-300 font-mono">
-                      <Tag className="h-3.5 w-3.5 text-slate-400" />
-                      SKU: <strong>{currentItem.payload.supplier_sku}</strong>
+                    <span className="rounded-sm bg-chip px-2.5 py-1.5 text-[12.5px] text-ink">
+                      SKU <strong className="font-semibold">{currentItem.payload.supplier_sku}</strong>
                     </span>
                   )}
                   {currentItem.payload?.pack_descriptor && (
-                    <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-slate-800 px-2.5 py-1 text-slate-700 dark:text-slate-300 font-mono">
-                      <Package className="h-3.5 w-3.5 text-slate-400" />
-                      Descriptor: <strong>{currentItem.payload.pack_descriptor}</strong>
+                    <span className="rounded-sm bg-chip px-2.5 py-1.5 text-[12.5px] text-ink">
+                      Pack{" "}
+                      <strong className="font-semibold">{currentItem.payload.pack_descriptor}</strong>
                     </span>
                   )}
                 </div>
-              </div>
 
-              {/* AI Vector Match Candidates */}
-              {currentItem.payload?.suggested_matches && currentItem.payload.suggested_matches.length > 0 && (
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-400 flex items-center gap-1.5">
-                      <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
-                      AI Vector Recommendations
-                    </span>
-                    <span className="text-[11px] text-slate-400 dark:text-slate-500">
-                      Click to select recommendation
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                    {currentItem.payload.suggested_matches.map((s, idx) => {
-                      const isSelected = selectedCanonicalId === s.id;
-                      const matchPct = Math.round((s.similarity || 0) * 100);
-                      return (
-                        <button
-                          key={s.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedCanonicalId(s.id);
-                            setPackMeasure(s.base_unit || "kg");
-                            setSearchQuery(s.name);
-                            setCatalogSearchOpen(false);
-                          }}
-                          className={`cursor-pointer p-3 rounded-xl border text-left transition-all relative ${
-                            isSelected
-                              ? "border-indigo-600 bg-indigo-50/70 shadow-xs ring-2 ring-indigo-600/30 dark:border-indigo-400 dark:bg-indigo-950/40"
-                              : "border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-[#0e182c] dark:hover:border-slate-700"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-1 mb-1.5">
-                            <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500">
-                              Option {idx + 1}
-                            </span>
-                            <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                matchPct >= 85
-                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                                  : "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300"
-                              }`}
-                            >
-                              {matchPct}% Match
-                            </span>
-                          </div>
-
-                          <div className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
-                            {s.name}
-                          </div>
-                          <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400 capitalize truncate">
-                            {s.category} • {s.base_unit}
-                          </div>
-
-                          {isSelected && (
-                            <div className="absolute right-2.5 bottom-2.5 text-indigo-600 dark:text-indigo-400">
-                              <Check className="h-4 w-4" />
-                            </div>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Full Canonical Catalog Search & Dropdown (Collapsible or Search) */}
-              <div className="space-y-2 pt-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Selected Benchmark Item:
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setCatalogSearchOpen(!catalogSearchOpen)}
-                    className="text-xs font-semibold text-[#2f4a7d] hover:underline dark:text-blue-400 cursor-pointer"
-                  >
-                    {catalogSearchOpen ? "Close catalog search" : "Search full catalog..."}
-                  </button>
-                </div>
-
-                {/* Selected Item Preview Pill */}
-                {selectedCanonicalItem && (
-                  <div className="rounded-xl border border-slate-200 bg-[#f8fafc] p-3 flex items-center justify-between dark:border-slate-800 dark:bg-[#0e182c]">
-                    <div className="flex items-center gap-2.5 truncate pr-2">
-                      <div className="h-8 w-8 rounded-lg bg-[#2f4a7d]/10 text-[#2f4a7d] flex items-center justify-center shrink-0 dark:bg-blue-400/10 dark:text-blue-400 font-bold text-xs">
-                        {selectedCanonicalItem.category[0].toUpperCase()}
-                      </div>
-                      <div className="truncate">
-                        <div className="text-sm font-bold text-[#1b2b4a] dark:text-slate-100 truncate">
-                          {selectedCanonicalItem.name}
-                        </div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400 capitalize">
-                          {selectedCanonicalItem.category} • Standard Unit: <span className="font-mono font-semibold">{selectedCanonicalItem.base_unit}</span>
-                        </div>
-                      </div>
+                {/* Suggestions */}
+                {suggestions.length > 0 && (
+                  <div className="mt-8">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2.5 border-b border-rule pb-2.5">
+                      <h3 className="display-sm text-[11px] uppercase tracking-[0.18em]">
+                        What Sous thinks this is
+                      </h3>
+                      <span className="text-xs text-ink-muted">
+                        Pick one, or search the catalogue below
+                      </span>
                     </div>
 
-                    <span className="shrink-0 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 px-2 py-0.5 rounded-md">
-                      Selected Target
-                    </span>
-                  </div>
-                )}
-
-                {/* Collapsible Full Catalog Search Combobox */}
-                {catalogSearchOpen && (
-                  <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2 dark:border-slate-800 dark:bg-[#0e182c] animate-in fade-in duration-100">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
-                      <input
-                        ref={searchInputRef}
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search all benchmark catalog ingredients..."
-                        className="w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 py-1.5 text-xs outline-none focus:border-[#2f4a7d] focus:bg-white dark:border-slate-700 dark:bg-[#131f37] dark:text-slate-100"
-                        autoFocus
-                      />
-                    </div>
-
-                    <div className="max-h-40 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 rounded-lg border border-slate-100 dark:border-slate-800">
-                      {filteredCatalog.slice(0, 15).map((c) => {
-                        const isSelected = c.id === selectedCanonicalId;
+                    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      {suggestions.map((s) => {
+                        const isSelected = selectedCanonicalId === s.id;
+                        const matchPct = Math.round((s.similarity || 0) * 100);
                         return (
                           <button
-                            key={c.id}
+                            key={s.id}
                             type="button"
                             onClick={() => {
-                              setSelectedCanonicalId(c.id);
-                              setPackMeasure(c.base_unit);
+                              setSelectedCanonicalId(s.id);
+                              setPackMeasure(s.base_unit || "kg");
+                              setSearchQuery(s.name);
                               setCatalogSearchOpen(false);
                             }}
-                            className={`cursor-pointer w-full text-left px-3 py-2 flex items-center justify-between text-xs transition-colors ${
+                            className={`min-h-11 cursor-pointer rounded p-4 text-left transition-colors ${
                               isSelected
-                                ? "bg-[#f0f4fa] font-bold text-[#1b2b4a] dark:bg-[#1a2c4e] dark:text-blue-100"
-                                : "text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
+                                ? "border-2 border-ink bg-panel"
+                                : "border border-edge hover:bg-panel"
                             }`}
                           >
-                            <span className="truncate pr-2">{c.name}</span>
-                            <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500 shrink-0">
-                              {c.category} • /{c.base_unit}
+                            <span className="flex items-center justify-between gap-2">
+                              <span
+                                className={`num text-[11.5px] font-bold ${
+                                  matchPct >= 85 ? "text-under-ink" : "text-ink-soft"
+                                }`}
+                              >
+                                {matchPct}% sure
+                              </span>
+                              {isSelected && (
+                                <span className="flex h-[18px] w-[18px] items-center justify-center rounded-full bg-ink">
+                                  <Check className="h-3 w-3 text-on-ink" />
+                                </span>
+                              )}
+                            </span>
+                            <span
+                              className={`mt-2 block truncate text-[15px] ${
+                                isSelected ? "font-bold text-ink" : "font-semibold text-ink"
+                              }`}
+                            >
+                              {s.name}
+                            </span>
+                            <span className="mt-0.5 block truncate text-xs capitalize text-ink-muted">
+                              {s.category} &middot; priced per {s.base_unit}
                             </span>
                           </button>
                         );
@@ -620,108 +495,180 @@ export default function ReviewPage() {
                     </div>
                   </div>
                 )}
-              </div>
 
-              {/* Packaging Conversion Specifications */}
-              <div className="rounded-xl border border-slate-200 bg-[#f8fafc] p-4 space-y-3 dark:border-slate-800 dark:bg-[#0e182c]">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
-                    <Layers className="h-3.5 w-3.5 text-[#2f4a7d] dark:text-blue-400" />
-                    Packaging Conversion & Math
-                  </span>
-                  <span className="text-[11px] text-slate-400 dark:text-slate-500">
-                    Defines purchase case to benchmark base unit
-                  </span>
-                </div>
+                {/* Catalogue search */}
+                <div className="mt-5">
+                  <label htmlFor="cat-search" className="label-caps block pb-2">
+                    {suggestions.length > 0
+                      ? `Or search all ${catalog.length} catalogue ingredients`
+                      : `Search all ${catalog.length} catalogue ingredients`}
+                  </label>
+                  <input
+                    id="cat-search"
+                    ref={searchInputRef}
+                    type="search"
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setCatalogSearchOpen(true);
+                    }}
+                    onFocus={() => setCatalogSearchOpen(true)}
+                    placeholder="Start typing an ingredient name"
+                    className="field"
+                  />
 
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">
-                      Pack Units
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={packUnits}
-                      onChange={(e) => setPackUnits(parseInt(e.target.value, 10) || 1)}
-                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs sm:text-sm font-mono font-bold text-slate-800 outline-none focus:border-[#2f4a7d] dark:border-slate-700 dark:bg-[#131f37] dark:text-slate-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">
-                      Unit Size
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={packSize}
-                      onChange={(e) => setPackSize(parseFloat(e.target.value) || 1)}
-                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs sm:text-sm font-mono font-bold text-slate-800 outline-none focus:border-[#2f4a7d] dark:border-slate-700 dark:bg-[#131f37] dark:text-slate-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">
-                      Measure Unit
-                    </label>
-                    <select
-                      value={packMeasure}
-                      onChange={(e) => setPackMeasure(e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs sm:text-sm font-semibold text-slate-800 outline-none focus:border-[#2f4a7d] dark:border-slate-700 dark:bg-[#131f37] dark:text-slate-100"
-                    >
-                      <option value="kg">kg</option>
-                      <option value="L">L</option>
-                      <option value="each">each</option>
-                      <option value="lb">lb</option>
-                      <option value="ml">ml</option>
-                      <option value="g">g</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Conversion Summary Callout */}
-                <div className="pt-1 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
-                  <span>
-                    1 Invoiced Case = <strong className="font-mono text-slate-800 dark:text-white">{(packUnits * packSize).toFixed(2)} {packMeasure}</strong>
-                  </span>
-                  <span className="text-[11px] text-slate-400 dark:text-slate-500">
-                    Normalizes to standard <strong className="font-mono">{selectedCanonicalItem?.base_unit || packMeasure}</strong>
-                  </span>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleDismiss}
-                    disabled={resolving}
-                    className="cursor-pointer inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                    <span>Dismiss Item</span>
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleResolve}
-                  disabled={resolving || !selectedCanonicalId}
-                  className="cursor-pointer inline-flex items-center gap-2 rounded-xl bg-[#1b2b4a] px-6 py-2.5 text-xs sm:text-sm font-bold text-white shadow-xs hover:bg-[#2f4a7d] dark:bg-blue-600 dark:hover:bg-blue-500 disabled:opacity-50 transition-all"
-                >
-                  {resolving ? (
-                    <>
-                      <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                      <span>Saving & Caching...</span>
-                    </>
-                  ) : (
-                    <span>Accept & Cache Mapping</span>
+                  {selectedCanonicalItem && !catalogSearchOpen && (
+                    <p className="mt-2.5 text-[13px] text-ink-soft">
+                      Mapping to{" "}
+                      <strong className="font-semibold text-ink">{selectedCanonicalItem.name}</strong>{" "}
+                      <span className="capitalize text-ink-muted">
+                        ({selectedCanonicalItem.category} · per {selectedCanonicalItem.base_unit})
+                      </span>{" "}
+                      <button
+                        type="button"
+                        onClick={() => setCatalogSearchOpen(true)}
+                        className="cursor-pointer font-semibold text-accent hover:underline"
+                      >
+                        change
+                      </button>
+                    </p>
                   )}
-                </button>
+
+                  {catalogSearchOpen && (
+                    <div className="mt-3 max-h-56 overflow-y-auto border-t border-rule">
+                      {filteredCatalog.length === 0 ? (
+                        <p className="py-6 text-center text-xs text-ink-muted">
+                          Nothing in the catalogue matches that.
+                        </p>
+                      ) : (
+                        filteredCatalog.slice(0, 40).map((c) => {
+                          const isSelected = c.id === selectedCanonicalId;
+                          return (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedCanonicalId(c.id);
+                                setPackMeasure(c.base_unit);
+                                setSearchQuery(c.name);
+                                setCatalogSearchOpen(false);
+                              }}
+                              className={`flex w-full cursor-pointer items-center justify-between gap-3 border-b border-rule-soft px-1 py-2.5 text-left text-[13.5px] transition-colors hover:bg-panel ${
+                                isSelected ? "font-bold text-ink" : "text-ink-soft"
+                              }`}
+                            >
+                              <span className="truncate">{c.name}</span>
+                              <span className="shrink-0 text-[11.5px] capitalize text-ink-muted">
+                                {c.category} · {c.base_unit}
+                              </span>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Pack maths */}
+                <div className="panel mt-8 px-6 py-5">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2.5">
+                    <h3 className="display-sm text-[11px] uppercase tracking-[0.18em]">
+                      How the case breaks down
+                    </h3>
+                    <span className="text-xs text-ink-muted">
+                      {currentItem.payload?.pack_descriptor
+                        ? `Read from “${currentItem.payload.pack_descriptor}” — correct it if it's wrong`
+                        : "Set this so the unit price can be compared"}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-1 gap-3.5 sm:grid-cols-3">
+                    <div>
+                      <label htmlFor="pk-units" className="block pb-2 text-xs font-semibold text-ink-soft">
+                        Units in the case
+                      </label>
+                      <input
+                        id="pk-units"
+                        type="number"
+                        min="1"
+                        value={packUnits}
+                        onChange={(e) => setPackUnits(parseInt(e.target.value, 10) || 1)}
+                        className="h-11 w-full rounded border border-edge bg-panel px-3.5 text-[15px] font-semibold text-ink outline-none focus:border-accent"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="pk-size" className="block pb-2 text-xs font-semibold text-ink-soft">
+                        Size of each
+                      </label>
+                      <input
+                        id="pk-size"
+                        type="number"
+                        step="0.01"
+                        value={packSize}
+                        onChange={(e) => setPackSize(parseFloat(e.target.value) || 1)}
+                        className="h-11 w-full rounded border border-edge bg-panel px-3.5 text-[15px] font-semibold text-ink outline-none focus:border-accent"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="pk-measure" className="block pb-2 text-xs font-semibold text-ink-soft">
+                        Measured in
+                      </label>
+                      <select
+                        id="pk-measure"
+                        value={packMeasure}
+                        onChange={(e) => setPackMeasure(e.target.value)}
+                        className="h-11 w-full cursor-pointer rounded border border-edge bg-panel px-3 text-[15px] font-semibold text-ink outline-none focus:border-accent"
+                      >
+                        <option value="kg">kg</option>
+                        <option value="L">L</option>
+                        <option value="each">each</option>
+                        <option value="lb">lb</option>
+                        <option value="ml">ml</option>
+                        <option value="g">g</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <p className="display-sm mt-5 text-[19px] leading-snug">
+                    One case = <span className="num">{caseTotal.toFixed(2)} {packMeasure}</span>
+                    {selectedCanonicalItem && (
+                      <>
+                        , normalised to{" "}
+                        <span className="text-accent">{selectedCanonicalItem.base_unit}</span> for
+                        comparison.
+                      </>
+                    )}
+                  </p>
+                </div>
+
+                {/* Actions */}
+                <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-rule pt-5">
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={handleResolve}
+                      disabled={resolving || !selectedCanonicalId}
+                      className="pill-primary disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {resolving ? "Saving…" : "Confirm & remember"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDismiss}
+                      disabled={resolving}
+                      className="pill-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Not food &mdash; skip
+                    </button>
+                  </div>
+                  <span className="text-xs text-ink-muted">
+                    Confirming caches this SKU, so the next invoice maps itself.
+                  </span>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </section>
+        </>
       )}
     </div>
   );

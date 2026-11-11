@@ -2,10 +2,10 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { api, CanonicalItem, BenchmarkData, BenchmarkSummaryItem, ItemPriceHistoryRecord } from "@/lib/api";
+import { api, BenchmarkData, BenchmarkSummaryItem, ItemPriceHistoryRecord } from "@/lib/api";
 import { PriceCreepLineChart } from "@/components/charts/PriceCreepLineChart";
 import { AuditWindowControl } from "@/components/AuditWindowControl";
-import { Scale, Search, ShieldCheck, AlertCircle, Info, MapPin, Building2, Sliders, TrendingUp } from "lucide-react";
+import { AlertCircle, ShieldCheck } from "lucide-react";
 
 interface RadiusStop {
   value: number | null;
@@ -14,14 +14,131 @@ interface RadiusStop {
 }
 
 const RADIUS_STOPS: RadiusStop[] = [
-  { value: null, label: "Auto", sublabel: "Adaptive Ladder" },
+  { value: null, label: "Auto", sublabel: "Widens until there is enough data" },
   { value: 3, label: "3 km", sublabel: "Hyperlocal" },
   { value: 5, label: "5 km", sublabel: "District" },
   { value: 10, label: "10 km", sublabel: "Sub-region" },
-  { value: 15, label: "15 km", sublabel: "Greater Area" },
+  { value: 15, label: "15 km", sublabel: "Greater area" },
   { value: 25, label: "25 km", sublabel: "Regional" },
   { value: 50, label: "50 km", sublabel: "GTA-wide" },
 ];
+
+function money(value: number, decimals = 2) {
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}
+
+/**
+ * The local spread as one number line: the middle half as a band, the median
+ * as a tick, and your own price flagged against it. One look answers "am I
+ * paying over the odds", which three equal percentile cards never did.
+ */
+function SpreadStrip({
+  p25,
+  median,
+  p75,
+  yours,
+  baseUnit,
+}: {
+  p25: number;
+  median: number;
+  p75: number;
+  yours?: number | null;
+  baseUnit: string;
+}) {
+  const points = [p25, p75, median, ...(yours ? [yours] : [])];
+  const lo = Math.min(...points);
+  const hi = Math.max(...points);
+  const pad = Math.max((hi - lo) * 0.28, hi * 0.02);
+  const min = lo - pad;
+  const max = hi + pad;
+  const x = (v: number) => ((v - min) / (max - min)) * 1000;
+
+  const yoursOver = yours != null && yours > median;
+  const flagX = yours != null ? x(yours) : 0;
+  const flagAnchor = flagX > 880 ? "end" : flagX < 120 ? "start" : "middle";
+
+  return (
+    <svg
+      viewBox="0 0 1000 148"
+      width="100%"
+      height="148"
+      role="img"
+      aria-label={`Local spread: middle half $${p25.toFixed(2)} to $${p75.toFixed(2)}, median $${median.toFixed(
+        2
+      )}${yours != null ? `. Your price $${yours.toFixed(2)}` : ""}`}
+      className="block"
+    >
+      <line x1={x(p25)} y1="74" x2={x(p75)} y2="74" stroke="var(--edge)" strokeWidth="2" />
+      <rect
+        x={x(p25)}
+        y="56"
+        width={Math.max(x(p75) - x(p25), 2)}
+        height="36"
+        rx="4"
+        fill="var(--accent)"
+        opacity="0.2"
+      />
+      <line x1={x(median)} y1="46" x2={x(median)} y2="102" stroke="var(--ink)" strokeWidth="3" strokeLinecap="round" />
+      <text
+        x={x(median)}
+        y="36"
+        textAnchor="middle"
+        fontSize="13"
+        fontWeight="700"
+        fill="var(--ink)"
+        className="font-display"
+      >
+        Median ${median.toFixed(2)}
+      </text>
+
+      {yours != null && (
+        <g>
+          <line
+            x1={flagX}
+            y1="74"
+            x2={flagX}
+            y2="110"
+            stroke={yoursOver ? "var(--over)" : "var(--under)"}
+            strokeWidth="2"
+            strokeDasharray="4 4"
+          />
+          <circle
+            cx={flagX}
+            cy="74"
+            r="8"
+            fill={yoursOver ? "var(--over)" : "var(--under)"}
+            stroke="var(--panel)"
+            strokeWidth="2.5"
+          />
+          <text
+            x={flagX}
+            y="130"
+            textAnchor={flagAnchor}
+            fontSize="13"
+            fontWeight="700"
+            fill={yoursOver ? "var(--over-ink)" : "var(--under-ink)"}
+            className="font-display"
+          >
+            You · ${yours.toFixed(2)}
+          </text>
+        </g>
+      )}
+
+      <text x={x(p25)} y="120" textAnchor="middle" fontSize="11" fill="var(--ink-muted)">
+        ${p25.toFixed(2)}
+      </text>
+      <text x={x(p75)} y="120" textAnchor="middle" fontSize="11" fill="var(--ink-muted)">
+        ${p75.toFixed(2)}
+      </text>
+      <text x="0" y="16" fontSize="11" fill="var(--ink-muted)">
+        per {baseUnit}
+      </text>
+    </svg>
+  );
+}
 
 function BenchmarkContent() {
   const searchParams = useSearchParams();
@@ -30,7 +147,7 @@ function BenchmarkContent() {
   const [items, setItems] = useState<BenchmarkSummaryItem[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<string>(initialItemId || "");
   const [windowDays, setWindowDays] = useState<number>(90);
-  const [sliderIndex, setSliderIndex] = useState<number>(0);
+  const [radiusIndex, setRadiusIndex] = useState<number>(0);
   const [activeRadiusKm, setActiveRadiusKm] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [withDataOnly, setWithDataOnly] = useState<boolean>(true);
@@ -39,9 +156,9 @@ function BenchmarkContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function handleSliderChange(newIndex: number) {
+  function handleRadiusChange(newIndex: number) {
     const clamped = Math.max(0, Math.min(newIndex, RADIUS_STOPS.length - 1));
-    setSliderIndex(clamped);
+    setRadiusIndex(clamped);
     setActiveRadiusKm(RADIUS_STOPS[clamped].value);
   }
 
@@ -60,7 +177,7 @@ function BenchmarkContent() {
           }
           const defaultItem = withDataOnly
             ? catalog.find((i) => i.has_data) || catalog[0]
-            : catalog.find((i) => i.name.includes("Roma Tomatoes")) || catalog[0];
+            : catalog[0];
           return defaultItem.id;
         });
       } catch {
@@ -77,7 +194,7 @@ function BenchmarkContent() {
             setSelectedItemId((prev) => prev || mappedFallback[0].id);
           }
         } catch {
-          setError("Failed to load canonical item catalogue.");
+          setError("Could not load the ingredient catalogue.");
         }
       }
     }
@@ -112,7 +229,6 @@ function BenchmarkContent() {
         setError(null);
         const data = await api.getBenchmark(selectedItemId, windowDays, activeRadiusKm);
         setBenchmark(data);
-        // Sync item data availability with live benchmark response
         setItems((prev) =>
           prev.map((item) =>
             item.id === selectedItemId
@@ -141,359 +257,286 @@ function BenchmarkContent() {
 
   const selectedItem = items.find((i) => i.id === selectedItemId);
 
-  const filteredItems = items.filter((item) => {
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
-    if (!matchesSearch) return false;
-    if (withDataOnly) {
-      return item.has_data === true;
-    }
-    return true;
-  });
+  const filteredItems = items
+    .filter((item) => {
+      const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
+      if (!matchesSearch) return false;
+      if (withDataOnly) return item.has_data === true;
+      return true;
+    })
+    .sort((a, b) => {
+      if (a.has_data !== b.has_data) return a.has_data ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+
+  const yours = benchmark?.tenant_latest_price ?? null;
+  const gapPct =
+    yours != null && benchmark?.median ? ((yours - benchmark.median) / benchmark.median) * 100 : null;
+  const gapAbs = yours != null && benchmark?.median ? yours - benchmark.median : null;
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="pb-2 border-b border-slate-200/60 dark:border-slate-800">
-        <h1 className="mt-2 text-2xl font-bold tracking-tight text-[#1b2b4a] dark:text-slate-100 sm:text-3xl">
-          Local Market Benchmarks
-        </h1>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400 max-w-3xl">
-          Compare your invoiced ingredient pricing against an anonymized network of participating independent restaurants in your local region.
+    <div>
+      {/* Page head */}
+      <div className="pb-7">
+        <span className="eyebrow">Local market</span>
+        <h1 className="display-xl mt-2 text-4xl sm:text-[46px]">Benchmarks</h1>
+        <p className="mt-2.5 max-w-2xl text-sm leading-relaxed text-ink-soft">
+          What independent kitchens around you actually pay for the same ingredient. Pooled and
+          anonymised &mdash; never attributed to a named restaurant.
         </p>
       </div>
 
-      {/* Main Grid: Item Picker + Benchmark Display */}
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
-        {/* Left Column: Item Selector (4 cols) */}
-        <div className="lg:col-span-4 space-y-4">
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-[#131f37]">
-            <div className="relative mb-3">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 dark:text-slate-500" />
-              <input
-                type="text"
-                placeholder="Search benchmarkable items..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-9 pr-3 py-2 text-sm outline-none transition-colors focus:border-[#2f4a7d] focus:bg-white text-[#1b2b4a] placeholder-slate-400 dark:border-slate-700 dark:bg-[#0e182c] dark:text-slate-100 dark:focus:border-blue-400 dark:focus:bg-[#0e182c] dark:placeholder-slate-500"
-              />
-            </div>
-
-            {/* Toggle: Filter items with enough data */}
-            <div className="flex items-center justify-between px-1 pb-3 mb-2 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-semibold text-[#1b2b4a] dark:text-slate-200">
-                  {withDataOnly ? "Active Benchmarks" : "All Benchmark Items"}
-                </span>
-                <span className="text-[11px] font-mono rounded-md bg-slate-100 px-1.5 py-0.5 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                  {filteredItems.length}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                  Active only
-                </span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={withDataOnly}
-                  onClick={() => handleToggleWithDataOnly(!withDataOnly)}
-                  title={withDataOnly ? "Showing items with active market benchmarks" : "Showing all items"}
-                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                    withDataOnly
-                      ? "bg-[#1b2b4a] dark:bg-blue-600"
-                      : "bg-slate-200 dark:bg-slate-700"
+      {/* Cohort controls */}
+      <section className="section-open section-close flex flex-wrap items-end justify-between gap-8 py-5">
+        <fieldset className="m-0 min-w-0 flex-[1_1_520px] border-0 p-0">
+          <legend className="label-caps pb-2.5">Trade radius</legend>
+          <div className="flex flex-wrap gap-2">
+            {RADIUS_STOPS.map((stop, idx) => {
+              const isActive = idx === radiusIndex;
+              return (
+                <label
+                  key={stop.label}
+                  title={stop.sublabel}
+                  className={`inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full px-4 text-[13px] transition-colors ${
+                    isActive
+                      ? "border border-ink bg-ink font-bold text-on-ink"
+                      : "border border-edge font-semibold text-ink-soft hover:text-ink"
                   }`}
                 >
-                  <span
-                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
-                      withDataOnly ? "translate-x-4" : "translate-x-0"
-                    }`}
+                  <input
+                    type="radio"
+                    name="trade-radius"
+                    checked={isActive}
+                    onChange={() => handleRadiusChange(idx)}
+                    className="absolute h-px w-px opacity-0"
                   />
-                </button>
-              </div>
-            </div>
-
-            <div className="max-h-[375px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 pr-1">
-              {filteredItems.length === 0 ? (
-                <div className="py-12 px-4 text-center">
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    No items match your criteria.
-                  </p>
-                  {withDataOnly && (
-                    <button
-                      type="button"
-                      onClick={() => handleToggleWithDataOnly(false)}
-                      className="mt-2 text-xs font-semibold text-[#2f4a7d] hover:underline dark:text-blue-400"
-                    >
-                      Show all items
-                    </button>
+                  {stop.label}
+                  {isActive && benchmark && !benchmark.suppressed && (
+                    <span className="font-semibold text-ramp-5">
+                      {benchmark.n_restaurants} kitchens
+                    </span>
                   )}
-                </div>
-              ) : (
-                filteredItems.map((item) => {
-                  const isSelected = item.id === selectedItemId;
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => setSelectedItemId(item.id)}
-                      className={`w-full text-left px-3.5 py-3 rounded-xl transition-all flex items-center justify-between text-sm ${
-                        isSelected
-                          ? "bg-[#f0f4fa] font-bold text-[#1b2b4a] shadow-2xs ring-2 ring-inset ring-[#2f4a7d] border-0 dark:bg-[#1a2c4e] dark:text-blue-100 dark:ring-blue-400"
-                          : "text-slate-600 hover:bg-[#f8fafc] hover:text-[#1b2b4a] dark:text-slate-400 dark:hover:bg-[#1a2c4e]/50 dark:hover:text-slate-200"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 truncate pr-2">
-                        <span className="truncate">{item.name}</span>
-                        {!withDataOnly && !item.has_data && (
-                          <span className="shrink-0 text-[10px] font-normal text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800/80 px-1.5 py-0.5 rounded">
-                            pending data
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-[11px] font-mono text-slate-400 dark:text-slate-500 shrink-0">/{item.base_unit}</span>
-                    </button>
-                  );
-                })
-              )}
-            </div>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        <AuditWindowControl value={windowDays} onChange={setWindowDays} label="Audit window" />
+      </section>
+
+      <section className="flex flex-wrap items-start gap-12 pt-9">
+        {/* Item list */}
+        <div className="min-w-0 max-w-[400px] flex-[1_1_320px]">
+          <h2 className="display-sm text-base">Your benchmarkable items</h2>
+          <p className="mb-4 mt-1.5 text-xs leading-relaxed text-ink-muted">
+            Items with a live local cohort come first.
+          </p>
+
+          <label htmlFor="bm-search" className="label-caps block pb-2">
+            Find an item
+          </label>
+          <input
+            id="bm-search"
+            type="search"
+            placeholder={`Search ${items.length} items`}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="field"
+          />
+
+          <div className="mt-3.5 flex items-center justify-between gap-3">
+            <span className="text-xs text-ink-muted">
+              {filteredItems.length} shown
+            </span>
+            <label className="flex cursor-pointer items-center gap-2.5 text-xs text-ink-soft">
+              <input
+                type="checkbox"
+                checked={withDataOnly}
+                onChange={() => handleToggleWithDataOnly(!withDataOnly)}
+                className="h-4 w-4 accent-[var(--ink)]"
+              />
+              Live benchmarks only
+            </label>
+          </div>
+
+          <div className="mt-4 border-t border-rule">
+            {filteredItems.length === 0 ? (
+              <div className="py-10 text-center">
+                <p className="text-xs text-ink-muted">Nothing matches that.</p>
+                {withDataOnly && (
+                  <button
+                    type="button"
+                    onClick={() => handleToggleWithDataOnly(false)}
+                    className="mt-2 cursor-pointer text-xs font-semibold text-accent hover:underline"
+                  >
+                    Show every item
+                  </button>
+                )}
+              </div>
+            ) : (
+              filteredItems.map((item) => {
+                const isSelected = item.id === selectedItemId;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setSelectedItemId(item.id)}
+                    className={`flex w-full cursor-pointer items-center justify-between gap-3 border-b border-rule-soft py-3.5 text-left transition-colors hover:bg-panel ${
+                      isSelected ? "border-l-[3px] border-l-ink bg-panel pl-3.5" : "pl-[3px]"
+                    }`}
+                  >
+                    <span className="min-w-0">
+                      <span
+                        className={`block truncate text-sm ${
+                          isSelected ? "font-bold text-ink" : "font-semibold text-ink"
+                        }`}
+                      >
+                        {item.name}
+                      </span>
+                      <span className="num block text-[11px] text-ink-muted">
+                        {item.median ? `Median $${money(item.median)}` : "No local median yet"} /
+                        {item.base_unit}
+                      </span>
+                    </span>
+                    {!item.has_data && (
+                      <span className="shrink-0 rounded-sm bg-chip px-1.5 py-1 text-[9px] font-bold uppercase tracking-[0.1em] text-ink-soft">
+                        Pending
+                      </span>
+                    )}
+                  </button>
+                );
+              })
+            )}
           </div>
         </div>
 
-        {/* Right Column: Benchmark Card & Distribution (8 cols) */}
-        <div className="lg:col-span-8 space-y-6">
-          {/* Unified Controls & Market Cohort Card */}
-          <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs dark:border-slate-800 dark:bg-[#131f37]">
-            <div className="p-5 sm:p-6 space-y-5">
-              {/* Row 1: Selected Item & Audit Window */}
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                    Selected Item
-                  </span>
-                  <div className="text-lg font-extrabold text-[#1b2b4a] dark:text-slate-100">
-                    {selectedItem?.name || "Select an item"}
-                    {selectedItem && (
-                      <span className="ml-1.5 text-xs font-normal text-slate-400 dark:text-slate-500">
-                        ({selectedItem.base_unit})
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <AuditWindowControl
-                  value={windowDays}
-                  onChange={setWindowDays}
-                  label="Audit Window"
-                />
-              </div>
-
-              {/* Divider */}
-              <div className="border-t border-slate-100 dark:border-slate-800/80" />
-
-              {/* Row 2: Competitor Trade Radius */}
-              <div className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <Sliders className="h-4 w-4 text-[#2f4a7d] dark:text-blue-400" />
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                      Competitor Trade Radius
-                    </span>
-                  </div>
-                  <div className="inline-flex items-center gap-1.5 rounded-lg bg-[#f0f4fa] px-2.5 py-1 text-xs font-bold text-[#1b2b4a] dark:bg-[#1a2c4e] dark:text-blue-200">
-                    <span>{RADIUS_STOPS[sliderIndex].label}</span>
-                    <span className="font-normal text-slate-400 dark:text-slate-400">
-                      — {RADIUS_STOPS[sliderIndex].sublabel}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Range slider track */}
-                <div className="pt-2 px-1">
-                  <input
-                    type="range"
-                    min={0}
-                    max={RADIUS_STOPS.length - 1}
-                    step={1}
-                    value={sliderIndex}
-                    onChange={(e) => handleSliderChange(Number(e.target.value))}
-                    className="w-full accent-[#1b2b4a] dark:accent-blue-500 cursor-pointer h-2 bg-slate-100 dark:bg-slate-700 rounded-lg appearance-none transition-all"
-                  />
-                  <div className="flex justify-between text-[11px] text-slate-400 dark:text-slate-500 pt-2 font-mono">
-                    {RADIUS_STOPS.map((stop, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => handleSliderChange(idx)}
-                        className={`cursor-pointer transition-all hover:text-[#1b2b4a] dark:hover:text-white ${
-                          idx === sliderIndex
-                            ? "font-bold text-[#1b2b4a] dark:text-blue-400 scale-105"
-                            : "text-slate-400 dark:text-slate-500"
-                        }`}
-                      >
-                        {stop.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Row 3: Cohort & Market Area Footer Strip */}
-            {benchmark && !benchmark.suppressed && (
-              <div className={`border-t border-slate-100 bg-[#f6f8fc] px-5 py-3.5 sm:px-6 dark:border-slate-800/80 dark:bg-[#162544] transition-opacity ${loading ? "opacity-60" : ""}`}>
-                <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-medium text-[#1b2b4a] dark:text-slate-200">
-                  <div className="flex items-center gap-1.5">
-                    <Building2 className="h-4 w-4 text-[#2f4a7d] dark:text-blue-400" />
-                    <span>
-                      Calculated across <strong className="font-bold">{benchmark.n_restaurants} independent restaurants</strong>
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
+        {/* Detail */}
+        <div className="min-w-0 flex-[999_1_540px]">
           {loading ? (
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-12 text-center shadow-xs dark:border-slate-800 dark:bg-[#131f37]">
-              <div className="inline-block h-8 w-8 animate-spin rounded-full border-3 border-[#2f4a7d] dark:border-blue-400 border-t-transparent" />
-              <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Calculating regional market benchmarks...</p>
+            <div className="panel p-12 text-center">
+              <div className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+              <p className="mt-3 text-sm text-ink-soft">Working out the local market…</p>
             </div>
           ) : error ? (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-6 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200">
-              <div className="flex items-center gap-2 font-semibold">
-                <AlertCircle className="h-5 w-5 text-amber-700 dark:text-amber-400" /> Benchmark Notice
+            <div className="flex items-start gap-3 border-t-2 border-over pt-5">
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-over" />
+              <div>
+                <h2 className="display-sm text-base">Benchmark notice</h2>
+                <p className="mt-1 text-sm text-ink-soft">{error}</p>
               </div>
-              <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">{error}</p>
             </div>
           ) : benchmark?.suppressed ? (
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-10 text-center shadow-xs dark:border-slate-800 dark:bg-[#131f37] space-y-4">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#f0f4fa] text-[#2f4a7d] dark:bg-[#1a2c4e] dark:text-blue-300">
-                <ShieldCheck className="h-6 w-6" />
-              </div>
-              <h3 className="text-base font-bold text-[#1b2b4a] dark:text-slate-100">
+            <div className="border-t-2 border-ink pt-7">
+              <ShieldCheck className="h-7 w-7 text-accent" />
+              <h2 className="display-sm mt-4 text-2xl">
                 {activeRadiusKm !== null
-                  ? `More Data Needed Within ${activeRadiusKm} km`
-                  : "More Data Needed for this Item"}
-              </h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                  ? `Not enough kitchens within ${activeRadiusKm} km yet`
+                  : "Not enough kitchens reporting this yet"}
+              </h2>
+              <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-ink-soft">
                 {benchmark.suppression_reason ||
-                  "To protect restaurant privacy and ensure accurate numbers, benchmarks only appear once enough participating restaurants report prices for this ingredient."}
+                  "A benchmark only appears once enough nearby restaurants have invoiced this ingredient, so no single kitchen's pricing can be worked out from it."}
               </p>
 
               {activeRadiusKm !== null && (
-                <div className="pt-2 flex flex-wrap items-center justify-center gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => handleSliderChange(0)}
-                    className="cursor-pointer inline-flex items-center gap-1.5 rounded-xl bg-[#1b2b4a] px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#2f4a7d] transition-all dark:bg-blue-600 dark:hover:bg-blue-500"
-                  >
-                    Switch to Auto-Expand
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <button type="button" onClick={() => handleRadiusChange(0)} className="pill-primary">
+                    Let it widen automatically
                   </button>
-                  {sliderIndex < RADIUS_STOPS.length - 1 && (
+                  {radiusIndex < RADIUS_STOPS.length - 1 && (
                     <button
                       type="button"
-                      onClick={() => handleSliderChange(sliderIndex + 1)}
-                      className="cursor-pointer inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-all dark:border-slate-700 dark:bg-[#0e182c] dark:text-slate-200 dark:hover:bg-slate-800"
+                      onClick={() => handleRadiusChange(radiusIndex + 1)}
+                      className="pill-secondary"
                     >
-                      Expand to {RADIUS_STOPS[sliderIndex + 1].label}
+                      Try {RADIUS_STOPS[radiusIndex + 1].label}
                     </button>
                   )}
                 </div>
               )}
 
-              <div className="pt-1 text-xs text-slate-400 dark:text-slate-500">
-                Benchmarks update automatically as new invoices are uploaded by local operators.
-              </div>
+              <p className="mt-6 text-xs text-ink-muted">
+                This fills in on its own as nearby operators upload invoices.
+              </p>
             </div>
           ) : (
             benchmark && (
-              <div className="space-y-6">
-                {/* Benchmark Cards: p25 / Median / p75 */}
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  {/* p25 */}
-                  <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs text-center dark:border-slate-800 dark:bg-[#131f37]">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                      25th Percentile
-                    </span>
-                    <div className="mt-2 text-2xl font-bold font-mono text-slate-700 dark:text-slate-200">
-                      ${benchmark.p25?.toFixed(2)}
-                    </div>
-                    <span className="text-xs text-slate-400 dark:text-slate-500">Lower quartile market rate</span>
-                  </div>
-
-                  {/* Median (Highlighted Hero Card) */}
-                  <div className="rounded-2xl border-2 border-[#2f4a7d] bg-[#f6f8fc] p-5 shadow-sm text-center relative overflow-hidden dark:border-blue-500 dark:bg-[#162544]">
-                    <span className="text-xs font-extrabold uppercase tracking-wider text-[#2f4a7d] dark:text-blue-300">
-                      Market Median
-                    </span>
-                    <div className="mt-2 text-3xl font-black font-mono text-[#1b2b4a] dark:text-white">
-                      ${benchmark.median?.toFixed(2)}
-                    </div>
-                    <span className="text-xs font-semibold text-[#2f4a7d] dark:text-blue-300">
-                      Regional market median
+              <>
+                {/* Verdict */}
+                <div className="section-open pt-6">
+                  <div className="flex flex-wrap items-baseline gap-2.5">
+                    <h2 className="display-xl text-3xl">{selectedItem?.name || "Select an item"}</h2>
+                    <span className="text-sm text-ink-muted">
+                      per {selectedItem?.base_unit} &middot; {benchmark.n_restaurants} kitchens
+                      {benchmark.radius_km_used ? ` within ${benchmark.radius_km_used} km` : ""}
                     </span>
                   </div>
 
-                  {/* p75 */}
-                  <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs text-center dark:border-slate-800 dark:bg-[#131f37]">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                      75th Percentile
-                    </span>
-                    <div className="mt-2 text-2xl font-bold font-mono text-slate-700 dark:text-slate-200">
-                      ${benchmark.p75?.toFixed(2)}
-                    </div>
-                    <span className="text-xs text-slate-400 dark:text-slate-500">Upper quartile market rate</span>
-                  </div>
+                  {gapAbs != null && gapPct != null && benchmark.median ? (
+                    <p className="display-sm mt-5 max-w-2xl text-[26px] leading-snug">
+                      {gapAbs > 0 ? (
+                        <>
+                          You are paying{" "}
+                          <span className="num text-over-ink">
+                            ${money(Math.abs(gapAbs))} over
+                          </span>{" "}
+                          the local median &mdash; {gapPct.toFixed(1)}% above what kitchens around you pay.
+                        </>
+                      ) : (
+                        <>
+                          You are paying{" "}
+                          <span className="num text-under-ink">
+                            ${money(Math.abs(gapAbs))} under
+                          </span>{" "}
+                          the local median. This one is working for you.
+                        </>
+                      )}
+                    </p>
+                  ) : (
+                    <p className="display-sm mt-5 max-w-2xl text-[26px] leading-snug">
+                      The local median is{" "}
+                      <span className="num">${money(benchmark.median ?? 0)}</span> per{" "}
+                      {selectedItem?.base_unit}. Upload an invoice with this item to see where you sit.
+                    </p>
+                  )}
                 </div>
 
-                {/* Restaurant Variance Card */}
-                {benchmark.tenant_latest_price && benchmark.median && (
-                  <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs flex flex-wrap items-center justify-between gap-4 dark:border-slate-800 dark:bg-[#131f37]">
-                    <div>
-                      <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Your Last Invoiced Unit Price</span>
-                      <div className="text-xl font-black font-mono text-[#1b2b4a] dark:text-slate-100">
-                        ${benchmark.tenant_latest_price.toFixed(2)}{" "}
-                        <span className="text-xs text-slate-400 dark:text-slate-500 font-normal">/{selectedItem?.base_unit}</span>
-                      </div>
+                {/* Spread */}
+                {benchmark.p25 != null && benchmark.p75 != null && benchmark.median != null && (
+                  <div className="panel mt-7 px-6 pb-3 pt-5">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2.5">
+                      <h3 className="display-sm text-[13px] uppercase tracking-[0.1em]">
+                        Where you sit in the local spread
+                      </h3>
+                      <span className="text-xs text-ink-muted">Past {windowDays} days</span>
                     </div>
-
-                    <div className="text-right">
-                      {benchmark.tenant_latest_price > benchmark.median ? (
-                        <div>
-                          <span className="inline-flex items-center rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 ring-1 ring-inset ring-rose-600/20 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-500/30">
-                            +{(((benchmark.tenant_latest_price - benchmark.median) / benchmark.median) * 100).toFixed(1)}% vs. Market Median
-                          </span>
-                          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">Potential renegotiation opportunity</p>
-                        </div>
-                      ) : (
-                        <div>
-                          <span className="inline-flex items-center rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 ring-1 ring-inset ring-emerald-600/20 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-500/30">
-                            {(((benchmark.tenant_latest_price - benchmark.median) / benchmark.median) * 100).toFixed(1)}% vs. Market Median
-                          </span>
-                          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">Competitive contract rate</p>
-                        </div>
-                      )}
+                    <div className="mt-2">
+                      <SpreadStrip
+                        p25={benchmark.p25}
+                        median={benchmark.median}
+                        p75={benchmark.p75}
+                        yours={yours}
+                        baseUnit={selectedItem?.base_unit || "unit"}
+                      />
                     </div>
+                    <p className="mt-1 pb-2 text-[13px] text-ink-soft">
+                      The band is the middle half of the cohort &mdash; a quarter of kitchens pay less
+                      than ${money(benchmark.p25)}, a quarter pay more than ${money(benchmark.p75)}.
+                    </p>
                   </div>
                 )}
 
-                {/* Historical Price-Creep & Benchmark Trajectory Line Chart */}
-                <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-[#131f37] space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4 text-[#2f4a7d] dark:text-blue-400" />
-                      <h3 className="text-sm font-bold uppercase tracking-wider text-[#1b2b4a] dark:text-slate-100">
-                        Invoiced Price Trajectory vs. Regional Market Median
-                      </h3>
-                    </div>
-                    <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
-                      {itemHistory.length === 1 ? "1 recorded purchase" : `${itemHistory.length} recorded purchases`}
+                {/* Trajectory */}
+                <div className="panel mt-6 px-6 pb-4 pt-5">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2.5 pb-4">
+                    <h3 className="display-sm text-[13px] uppercase tracking-[0.1em]">
+                      Your price against the market
+                    </h3>
+                    <span className="text-xs text-ink-muted">
+                      {itemHistory.length === 1 ? "1 purchase" : `${itemHistory.length} purchases`}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Chronological line tracking your invoice purchase points against the regional peer median and interquartile corridor (p25–p75).
-                  </p>
                   <PriceCreepLineChart
                     history={itemHistory}
                     baseUnit={selectedItem?.base_unit || "unit"}
@@ -506,28 +549,29 @@ function BenchmarkContent() {
                   />
                 </div>
 
-                {/* Crucial Comparability Notice */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-500 shadow-2xs flex items-start gap-2.5 dark:border-slate-800 dark:bg-[#131f37] dark:text-slate-400">
-                  <Info className="h-4 w-4 shrink-0 text-[#2f4a7d] dark:text-blue-400 mt-0.5" />
-                  <div>
-                    <strong className="font-semibold text-[#1b2b4a] dark:text-slate-200">Pricing Note: </strong>
+                {/* Comparability */}
+                <div className="mt-7 flex items-start gap-3.5 border-t border-rule pt-5">
+                  <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-accent" />
+                  <p className="max-w-3xl text-[13px] leading-relaxed text-ink-soft">
+                    <strong className="font-semibold text-ink">How this is kept fair. </strong>
                     {benchmark.comparability_caveat}
-                  </div>
+                  </p>
                 </div>
-              </div>
+              </>
             )
           )}
         </div>
-      </div>
+      </section>
     </div>
   );
 }
 
 export default function BenchmarkPage() {
   return (
-    <Suspense fallback={<div className="p-8 text-center text-sm text-slate-500">Loading benchmark tool...</div>}>
+    <Suspense
+      fallback={<div className="p-8 text-center text-sm text-ink-soft">Loading benchmarks…</div>}
+    >
       <BenchmarkContent />
     </Suspense>
   );
 }
-

@@ -2,27 +2,249 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ---------------------------------------------------------------------------
+   Pass — the Sous design tokens, taken off the logo.
+   Navy ink, one slate-blue accent, warm paper ground. Every colour used in the
+   product should come from here; no raw hexes in components.
+   --------------------------------------------------------------------------- */
+
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  /* Surfaces */
+  --paper: #f7f4ed;        /* page ground */
+  --paper-raised: #fcfaf5; /* app bar, sticky chrome */
+  --panel: #fffdf8;        /* charts and forms only — never a card in a card */
+
+  /* Ink */
+  --ink: #17294b;          /* logo navy */
+  --ink-soft: #5a6478;     /* body copy */
+  --ink-muted: #6b7383;    /* captions, labels */
+  --on-ink: #fcfaf5;       /* text on a navy fill */
+
+  /* Accent */
+  --accent: #35578f;       /* the lighter blue of the logo's O */
+  --accent-wash: #ecf0f7;
+
+  /* Lines */
+  --rule: #e3dbcb;         /* section close */
+  --rule-soft: #ede7da;    /* row divider */
+  --edge: #c8bda6;         /* control border */
+  --chip: #ede7da;         /* neutral chip fill */
+  --grid: #ede7da;         /* chart gridlines */
+
+  /* Status — always shipped with a label and an arrow, never colour alone */
+  --over: #b2532b;
+  --over-ink: #8e3f1e;
+  --over-wash: #f6e8df;
+  --under: #0e6e62;
+  --under-ink: #0b584e;
+  --under-wash: #e4f1ee;
+
+  /* Ranked navy ramp, light to dark — for anything ordered by size */
+  --ramp-1: #17294b;
+  --ramp-2: #2b4675;
+  --ramp-3: #3f639c;
+  --ramp-4: #5c7fb4;
+  --ramp-5: #8aa5cb;
+
+  --background: var(--paper);
+  --foreground: var(--ink);
 }
 
 .dark {
-  --background: #0b1324;
-  --foreground: #f1f5f9;
+  --paper: #0e1b33;
+  --paper-raised: #13243f;
+  --panel: #142542;
+
+  --ink: #f2efe7;
+  --ink-soft: #b9c4d8;
+  --ink-muted: #93a1bc;
+  --on-ink: #0e1b33;
+
+  --accent: #8aa5cb;
+  --accent-wash: #1c3059;
+
+  --rule: #2a3c5e;
+  --rule-soft: #22334f;
+  --edge: #3a4d70;
+  --chip: #1e3150;
+  --grid: #22334f;
+
+  --over: #d4793f;
+  --over-ink: #f0b692;
+  --over-wash: #3a2418;
+  --under: #35a392;
+  --under-ink: #8fd8c9;
+  --under-wash: #10332e;
+
+  --ramp-1: #c3d2e8;
+  --ramp-2: #a6bcda;
+  --ramp-3: #8aa5cb;
+  --ramp-4: #6d8dbe;
+  --ramp-5: #4d71a8;
+
+  --background: var(--paper);
+  --foreground: var(--ink);
 }
 
 @theme inline {
+  --color-paper: var(--paper);
+  --color-paper-raised: var(--paper-raised);
+  --color-panel: var(--panel);
+
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-muted: var(--ink-muted);
+  --color-on-ink: var(--on-ink);
+
+  --color-accent: var(--accent);
+  --color-accent-wash: var(--accent-wash);
+
+  --color-rule: var(--rule);
+  --color-rule-soft: var(--rule-soft);
+  --color-edge: var(--edge);
+  --color-chip: var(--chip);
+  --color-grid: var(--grid);
+
+  --color-over: var(--over);
+  --color-over-ink: var(--over-ink);
+  --color-over-wash: var(--over-wash);
+  --color-under: var(--under);
+  --color-under-ink: var(--under-ink);
+  --color-under-wash: var(--under-wash);
+
+  --color-ramp-1: var(--ramp-1);
+  --color-ramp-2: var(--ramp-2);
+  --color-ramp-3: var(--ramp-3);
+  --color-ramp-4: var(--ramp-4);
+  --color-ramp-5: var(--ramp-5);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-montserrat);
   --font-mono: var(--font-geist-mono);
 }
 
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
+/* ---------------------------------------------------------------------------
+   Pass type patterns. The tracked uppercase label echoes COLLECTIVE in the
+   logo; every money figure is tabular so columns line up.
+   --------------------------------------------------------------------------- */
+
+.label-caps {
+  font-family: var(--font-montserrat), sans-serif;
+  font-size: 0.5625rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.eyebrow {
+  font-family: var(--font-montserrat), sans-serif;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* No colour here on purpose: these inherit, so they work on the paper ground
+   (body is ink) and reversed out on a navy fill alike. */
+.display-xl {
+  font-family: var(--font-montserrat), sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+
+.display-sm {
+  font-family: var(--font-montserrat), sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* A section opens on a 2px navy rule and closes on a hairline. */
+.section-open {
+  border-top: 2px solid var(--ink);
+}
+
+.section-close {
+  border-bottom: 1px solid var(--rule);
+}
+
+/* Panels are for charts and forms only. */
+.panel {
+  background-color: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 0.25rem;
+}
+
+/* Controls are fully rounded; surfaces are 4px. Nothing in between. */
+.pill-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0 1.375rem;
+  border-radius: 9999px;
+  background-color: var(--ink);
+  color: var(--on-ink);
+  font-family: var(--font-montserrat), sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.pill-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0 1.375rem;
+  border-radius: 9999px;
+  border: 1px solid var(--edge);
+  background-color: transparent;
+  color: var(--ink);
+  font-family: var(--font-montserrat), sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.field {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  border: 1px solid var(--edge);
+  border-radius: 9999px;
+  background-color: var(--panel);
+  color: var(--ink);
+  font-size: 0.875rem;
+  outline: none;
+}
+
+.field::placeholder {
+  color: var(--ink-muted);
+}
+
+.field:focus {
+  border-color: var(--accent);
+}

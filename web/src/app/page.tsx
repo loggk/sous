@@ -4,25 +4,20 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, SpendSummary, PriceAlert, ItemPriceHistoryRecord, BenchmarkData } from "@/lib/api";
-import { CategoryDonutChart } from "@/components/charts/CategoryDonutChart";
 import { SpendTrajectoryChart } from "@/components/charts/SpendTrajectoryChart";
 import { PriceCreepLineChart } from "@/components/charts/PriceCreepLineChart";
-import {
-  AlertTriangle,
-  ArrowUpRight,
-  DollarSign,
-  Truck,
-  ShieldAlert,
-  TrendingUp,
-  Receipt,
-  Scale,
-  CheckCircle2,
-  PieChart,
-  X,
-  FileSpreadsheet,
-  ExternalLink,
-} from "lucide-react";
+import { AlertTriangle, ArrowUpRight, CheckCircle2, ShieldAlert, X } from "lucide-react";
 import { AuditWindowControl } from "@/components/AuditWindowControl";
+
+/** The navy ramp, light to dark. Categories are ranked by size, not identity. */
+const RAMP = ["bg-ramp-1", "bg-ramp-2", "bg-ramp-3", "bg-ramp-4", "bg-ramp-5"];
+
+function money(value: number, decimals = 2) {
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -84,13 +79,20 @@ export default function DashboardPage() {
   }, [selectedAlert, windowDays]);
 
   const totalAlertImpact = alerts.reduce((acc, curr) => acc + (curr.estimated_dollar_impact || 0), 0);
+  const feePct = spend && spend.total_spend > 0 ? (spend.fees_total / spend.total_spend) * 100 : null;
+  const unmappedDrivers = spend?.top_items?.filter((i) => i.category === "Unmapped").length ?? 0;
+
+  const rankedCategories = Object.entries(spend?.by_category || {})
+    .filter(([, value]) => value > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
 
   if (loading && !spend) {
     return (
       <div className="flex h-96 items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#2f4a7d] border-t-transparent dark:border-blue-400" />
-          <p className="text-sm text-slate-500 dark:text-slate-400">Auditing invoice spend & detecting price shifts...</p>
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+          <p className="text-sm text-ink-soft">Reading your invoices and checking for price moves…</p>
         </div>
       </div>
     );
@@ -98,314 +100,345 @@ export default function DashboardPage() {
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-800 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
-        <h3 className="font-semibold text-lg flex items-center gap-2">
-          <ShieldAlert className="h-5 w-5" /> Connection Notice
+      <div className="rounded border border-over bg-over-wash p-6 text-over-ink">
+        <h3 className="display-sm flex items-center gap-2 text-lg text-over-ink">
+          <ShieldAlert className="h-5 w-5" /> Can&rsquo;t reach your data
         </h3>
         <p className="mt-2 text-sm">{error}</p>
-        <p className="mt-4 text-xs font-mono bg-red-100 dark:bg-red-900/40 p-2 rounded">
-          Ensure the FastAPI backend is running on http://localhost:8000
+        <p className="mt-4 rounded bg-chip p-2 font-mono text-xs text-ink-soft">
+          Check that the API is running on http://localhost:8000
         </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
-      {/* Header & Window Controls */}
-      <div className="flex flex-wrap items-end justify-between gap-4 pb-2 border-b border-slate-200/60 dark:border-slate-800">
+    <div>
+      {/* Page head */}
+      <div className="flex flex-wrap items-end justify-between gap-6 pb-7">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-[#1b2b4a] dark:text-slate-100 sm:text-3xl">
-            Spend Insights & Audit
-          </h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Direct visibility into your primary food cost drivers, unannounced price increases, and surcharge leaks.
+          <span className="eyebrow">Spend audit</span>
+          <h1 className="display-xl mt-2 text-4xl sm:text-[46px]">Insights</h1>
+          <p className="mt-2.5 max-w-xl text-sm leading-relaxed text-ink-soft">
+            Where the food cost actually went, which prices moved on you, and what that is worth.
           </p>
         </div>
 
-        {/* Audit Window Selector / Slider */}
-        <AuditWindowControl
-          value={windowDays}
-          onChange={setWindowDays}
-          label="Audit Window"
-        />
+        <AuditWindowControl value={windowDays} onChange={setWindowDays} label="Audit window" />
       </div>
 
-      {/* 3 Executive Financial Scorecards */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
-        {/* Total Spend */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-[#131f37]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              Invoiced Food Spend
-            </span>
-            <div className="rounded-xl bg-[#f0f4fa] p-2.5 text-[#2f4a7d] dark:bg-[#1a2c4e] dark:text-blue-300">
-              <DollarSign className="h-4 w-4" />
+      {/* The one finding that matters */}
+      <section className="section-open section-close flex flex-wrap items-center justify-between gap-10 py-8">
+        {alerts.length > 0 ? (
+          <>
+            <div className="min-w-0 flex-[1_1_480px]">
+              <span className="font-display text-[10px] font-bold uppercase tracking-[0.22em] text-over-ink">
+                Price creep exposure · {windowDays} days
+              </span>
+              <div className="mt-2.5 flex flex-wrap items-baseline gap-3.5">
+                <span className="display-xl num text-5xl sm:text-6xl">+${money(totalAlertImpact)}</span>
+                <span className="text-sm font-semibold text-over-ink">
+                  across {alerts.length} {alerts.length === 1 ? "ingredient" : "ingredients"}
+                </span>
+              </div>
+              <p className="mt-3.5 max-w-xl text-[15px] leading-relaxed text-ink-soft">
+                Suppliers moved these unit prices above your own baseline median. All of it is on the
+                table at your next order.
+              </p>
+              <div className="mt-5 flex flex-wrap gap-3">
+                <Link href="/benchmarks" className="pill-primary no-underline">
+                  Compare against the market
+                </Link>
+              </div>
             </div>
+
+            <div className="flex-[0_1_300px]">
+              <span className="label-caps">Where it sits</span>
+              <dl className="mt-3 space-y-2.5">
+                {alerts.slice(0, 3).map((alert) => (
+                  <div key={alert.canonical_item_id} className="flex items-baseline justify-between gap-4">
+                    <dt className="truncate text-sm text-ink-soft">{alert.item_name}</dt>
+                    <dd className="num shrink-0 text-sm font-semibold text-ink">
+                      +${money(alert.estimated_dollar_impact)}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          </>
+        ) : (
+          <div className="min-w-0 flex-[1_1_480px]">
+            <span className="font-display text-[10px] font-bold uppercase tracking-[0.22em] text-under-ink">
+              Price creep exposure · {windowDays} days
+            </span>
+            <div className="mt-2.5 flex flex-wrap items-center gap-3">
+              <CheckCircle2 className="h-7 w-7 text-under" />
+              <span className="display-xl text-4xl">Nothing has moved on you</span>
+            </div>
+            <p className="mt-3.5 max-w-xl text-[15px] leading-relaxed text-ink-soft">
+              Every ingredient is still priced at or below your contract median. New invoices are
+              checked automatically as they arrive.
+            </p>
           </div>
-          <div className="mt-3 text-3xl font-bold tracking-tight tabular-nums text-[#1b2b4a] dark:text-slate-100">
-            ${spend?.total_spend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-            Across all deliveries in the past {windowDays} days
+        )}
+      </section>
+
+      {/* Hairline stat row */}
+      <section className="section-close grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="py-6 pr-7">
+          <span className="label-caps">Invoiced food spend</span>
+          <div className="display-sm num mt-2 text-[27px]">${money(spend?.total_spend ?? 0)}</div>
+          <p className="mt-1.5 text-xs text-ink-muted">Across every delivery in the window</p>
+        </div>
+        <div className="border-rule px-7 py-6 sm:border-l">
+          <span className="label-caps">Surcharges &amp; drop fees</span>
+          <div className="display-sm num mt-2 text-[27px]">${money(spend?.fees_total ?? 0)}</div>
+          <p className="mt-1.5 text-xs text-ink-muted">
+            {feePct !== null
+              ? `${feePct.toFixed(1)}% of gross spend goes to fees`
+              : "Fuel surcharges and delivery fees"}
           </p>
         </div>
-
-        {/* Audited Surcharges & Fees */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-[#131f37]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              Surcharges & Drop Fees
-            </span>
-            <div className="rounded-xl bg-[#f0f4fa] p-2.5 text-[#2f4a7d] dark:bg-[#1a2c4e] dark:text-blue-300">
-              <Truck className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="mt-3 text-3xl font-bold tracking-tight tabular-nums text-[#1b2b4a] dark:text-slate-100">
-            ${spend?.fees_total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-            {spend && spend.total_spend > 0
-              ? `${((spend.fees_total / spend.total_spend) * 100).toFixed(1)}% of your gross spend goes to fees`
-              : "Fuel surcharges & delivery fees"}
+        <div className="border-rule px-7 py-6 lg:border-l">
+          <span className="label-caps">Prices above baseline</span>
+          <div className="display-sm num mt-2 text-[27px]">{alerts.length}</div>
+          <p className="mt-1.5 text-xs text-ink-muted">
+            {alerts.length > 0 ? "Listed below, biggest impact first" : "All within your baseline"}
           </p>
         </div>
-
-        {/* Active Price Creep Exposure */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-[#131f37]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              Price Creep Exposure
-            </span>
-            <div className={`rounded-xl p-2.5 ${alerts.length > 0 ? "bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400" : "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400"}`}>
-              {alerts.length > 0 ? <AlertTriangle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
-            </div>
-          </div>
-          <div className="mt-3 text-3xl font-bold tracking-tight tabular-nums text-[#1b2b4a] dark:text-slate-100">
-            {alerts.length > 0
-              ? `+$${totalAlertImpact.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-              : "$0.00"}
-          </div>
-          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-            {alerts.length > 0
-              ? `Sum of price jump impacts across ${alerts.length} ingredients`
-              : "All ingredient prices within expected baseline"}
+        <div className="border-rule py-6 pl-7 sm:border-l">
+          <span className="label-caps">Unmapped cost drivers</span>
+          <div className="display-sm num mt-2 text-[27px]">{unmappedDrivers}</div>
+          <p className="mt-1.5 text-xs">
+            {unmappedDrivers > 0 ? (
+              <Link href="/review" className="font-semibold text-accent no-underline hover:underline">
+                Map them now &rarr;
+              </Link>
+            ) : (
+              <span className="text-ink-muted">Every top driver is mapped</span>
+            )}
           </p>
         </div>
-      </div>
+      </section>
 
-      {/* Monthly Spend Trajectory Hero Section */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-[#131f37]">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+      {/* Weekly / monthly burn */}
+      <section className="pt-10">
+        <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h2 className="text-base font-bold text-[#1b2b4a] dark:text-slate-100 flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-[#2f4a7d] dark:text-blue-400" /> Monthly Spend Trajectory
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Purchasing burn rate and multi-distributor delivery allocations across billing cycles in the past {windowDays} days.
+            <h2 className="display-sm text-xl">Purchasing burn</h2>
+            <p className="mt-1.5 text-[13px] text-ink-muted">
+              Invoiced spend per billing cycle across the past {windowDays} days, and how it splits
+              between distributors.
             </p>
           </div>
         </div>
-        <SpendTrajectoryChart monthlyTrend={spend?.monthly_trend} totalSpend={spend?.total_spend || 0} />
-      </div>
+        <div className="panel mt-5 px-5 pb-4 pt-6">
+          <SpendTrajectoryChart monthlyTrend={spend?.monthly_trend} totalSpend={spend?.total_spend || 0} />
+        </div>
+      </section>
 
-      {/* Actionable Price Increases & Renegotiation Targets */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-[#131f37]">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+      {/* What changed */}
+      <section className="pt-10">
+        <div className="flex flex-wrap items-end justify-between gap-4 border-b-2 border-ink pb-3.5">
           <div>
-            <h2 className="text-base font-bold text-[#1b2b4a] dark:text-slate-100 flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-amber-500" /> Price-Increase Alerts
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Ingredients where recent invoice costs jumped above your baseline median. Click any row to view market benchmarks.
+            <h2 className="display-sm text-xl">What changed on you</h2>
+            <p className="mt-1.5 text-[13px] text-ink-muted">
+              Unit prices now above your own baseline median. Open a row for the trajectory and the
+              market comparison.
             </p>
           </div>
+          <Link
+            href="/benchmarks"
+            className="font-display text-[11px] font-bold uppercase tracking-[0.12em] text-accent no-underline hover:underline"
+          >
+            All benchmarks &rarr;
+          </Link>
         </div>
 
         {alerts.length === 0 ? (
-          <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-8 text-center dark:border-emerald-900/30 dark:bg-emerald-950/10">
-            <CheckCircle2 className="mx-auto h-7 w-7 text-emerald-600 dark:text-emerald-400" />
-            <h3 className="mt-2 text-sm font-bold text-emerald-900 dark:text-emerald-200">
-              No Unwarranted Price Increases Detected
-            </h3>
-            <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400 max-w-md mx-auto">
-              Your broadline supplier prices have remained consistent with your historical contract medians. Newly uploaded invoices are monitored automatically.
-            </p>
+          <div className="flex items-start gap-3.5 border-b border-rule py-7">
+            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-under" />
+            <div>
+              <h3 className="display-sm text-base">No unwarranted increases detected</h3>
+              <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-ink-soft">
+                Your broadline prices have held against your historical contract medians. Newly
+                uploaded invoices are monitored automatically.
+              </p>
+            </div>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-100 dark:border-slate-800 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                <tr>
-                  <th className="pb-3 font-semibold">Ingredient</th>
-                  <th className="pb-3 font-semibold">Baseline Median</th>
-                  <th className="pb-3 font-semibold">Latest Invoiced</th>
-                  <th className="pb-3 font-semibold">Unit Increase</th>
-                  <th className="pb-3 font-semibold text-right">Cost Impact</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {alerts.map((alert) => {
-                  const unitDiff = alert.latest_price - alert.baseline_median;
-                  return (
-                    <tr
-                      key={alert.canonical_item_id}
-                      onClick={() => setSelectedAlert(alert)}
-                      className="group cursor-pointer hover:bg-slate-50 dark:hover:bg-[#1a2c4e]/30 transition-colors"
-                      title="Click to view historical price trajectory & negotiation sheet"
-                    >
-                      <td className="py-3.5 font-semibold text-[#1b2b4a] dark:text-slate-100">
-                        <div className="flex items-center gap-1.5">
-                          <span>{alert.item_name}</span>
-                          <span className="text-xs text-slate-400 dark:text-slate-500 font-normal">/{alert.base_unit}</span>
-                          <span className="ml-1 text-[10px] font-semibold text-[#2f4a7d] bg-[#f0f4fa] dark:bg-[#1a2c4e] dark:text-blue-300 px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-                            Inspect
-                          </span>
-                          <ArrowUpRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-[#2f4a7d] dark:text-slate-600 dark:group-hover:text-blue-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
-                        </div>
-                      </td>
-                      <td className="py-3.5 text-slate-500 dark:text-slate-400 font-medium tabular-nums">
-                        ${alert.baseline_median.toFixed(2)}
-                      </td>
-                      <td className="py-3.5 text-slate-700 dark:text-slate-300 font-semibold tabular-nums">
-                        ${alert.latest_price.toFixed(2)}
-                      </td>
-                      <td className="py-3.5 font-semibold text-rose-600 dark:text-rose-400 tabular-nums">
-                        +${unitDiff.toFixed(2)} <span className="text-xs font-normal text-rose-500 dark:text-rose-400">({alert.percent_increase.toFixed(1)}%)</span>
-                      </td>
-                      <td className="py-3.5 text-right font-bold text-[#1b2b4a] dark:text-slate-100 tabular-nums">
-                        +${alert.estimated_dollar_impact.toFixed(2)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot>
-                <tr className="border-t border-slate-200 dark:border-slate-800 font-semibold text-xs text-slate-600 dark:text-slate-400">
-                  <td colSpan={4} className="pt-3.5 text-right font-medium">
-                    Total Price Creep Exposure:
-                  </td>
-                  <td className="pt-3.5 text-right font-bold text-sm text-[#1b2b4a] dark:text-slate-100 tabular-nums">
-                    +${totalAlertImpact.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+          <>
+            <div className="hidden grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,1fr)] gap-0 border-b border-rule pb-2.5 pt-3.5 sm:grid">
+              <span className="label-caps">Ingredient</span>
+              <span className="label-caps text-right">Baseline</span>
+              <span className="label-caps text-right">Latest</span>
+              <span className="label-caps text-right">Move</span>
+              <span className="label-caps text-right">{windowDays}-day impact</span>
+            </div>
+
+            {alerts.map((alert) => {
+              const unitDiff = alert.latest_price - alert.baseline_median;
+              return (
+                <button
+                  key={alert.canonical_item_id}
+                  type="button"
+                  onClick={() => setSelectedAlert(alert)}
+                  title="Open the price trajectory and market comparison"
+                  className="group grid w-full cursor-pointer grid-cols-2 items-center gap-y-2 border-b border-rule-soft py-4 text-left transition-colors hover:bg-panel sm:grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,1fr)] sm:gap-y-0"
+                >
+                  <span className="col-span-2 min-w-0 sm:col-span-1">
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-[15px] font-semibold text-ink">{alert.item_name}</span>
+                      <span className="text-xs font-normal text-ink-muted">/{alert.base_unit}</span>
+                      <ArrowUpRight className="h-3.5 w-3.5 text-ink-muted opacity-0 transition-opacity group-hover:opacity-100" />
+                    </span>
+                  </span>
+
+                  <span className="num text-sm text-ink-soft sm:text-right">
+                    <span className="label-caps mr-2 sm:hidden">Baseline</span>${alert.baseline_median.toFixed(2)}
+                  </span>
+                  <span className="num text-sm font-semibold text-ink sm:text-right">
+                    <span className="label-caps mr-2 sm:hidden">Latest</span>${alert.latest_price.toFixed(2)}
+                  </span>
+                  <span className="sm:text-right">
+                    <span className="num inline-flex items-center gap-1.5 rounded-full bg-over-wash px-2.5 py-1 text-xs font-bold text-over-ink">
+                      <AlertTriangle className="h-3 w-3 text-over" />
+                      +${unitDiff.toFixed(2)} ({alert.percent_increase.toFixed(1)}%)
+                    </span>
+                  </span>
+                  <span className="num font-display text-[15px] font-bold text-ink sm:text-right">
+                    +${money(alert.estimated_dollar_impact)}
+                  </span>
+                </button>
+              );
+            })}
+
+            <div className="flex items-baseline justify-between gap-4 pt-3.5">
+              <span className="text-xs font-medium text-ink-soft">Total exposure</span>
+              <span className="num display-sm text-sm">+${money(totalAlertImpact)}</span>
+            </div>
+          </>
         )}
-      </div>
+      </section>
 
-      {/* Two-Column Strategic Breakdown: Spend Categories & Top Cost Drivers */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Left: Spend by Category (Interactive Donut) */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-[#131f37]">
-          <div className="flex items-center justify-between mb-1">
-            <h2 className="text-base font-bold text-[#1b2b4a] dark:text-slate-100">
-              Spend by Category
-            </h2>
-            <PieChart className="h-4 w-4 text-slate-400" />
-          </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
-            Interactive breakdown of food budget across commodity departments
+      {/* Two-column breakdown */}
+      <section className="flex flex-wrap gap-12 pt-11">
+        <div className="min-w-0 flex-[1_1_420px]">
+          <h2 className="display-sm text-xl">Where the money went</h2>
+          <p className="mb-6 mt-1.5 text-[13px] text-ink-muted">
+            Share of invoiced food spend by department, ranked.
           </p>
 
-          <CategoryDonutChart
-            byCategory={spend?.by_category || {}}
-            totalSpend={spend?.total_spend || 0}
-          />
-        </div>
-
-        {/* Right: Top Cost Drivers (Where the money actually goes!) */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-[#131f37]">
-          <div className="flex items-center justify-between mb-1">
-            <h2 className="text-base font-bold text-[#1b2b4a] dark:text-slate-100">
-              Top Cost-Driver Ingredients
-            </h2>
-            <TrendingUp className="h-4 w-4 text-slate-400" />
-          </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mb-5">
-            Your highest expenditure ingredients and their share of food cost
-          </p>
-
-          <div className="space-y-4">
-            {spend?.top_items && spend.top_items.length > 0 ? (
-              spend.top_items.slice(0, 5).map((item) => {
-                const pct = item.pct_of_spend;
+          {rankedCategories.length === 0 ? (
+            <p className="py-8 text-center text-xs text-ink-muted">
+              Categories populate automatically as invoices are mapped.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {rankedCategories.map(([category, amount], idx) => {
+                const pct = spend && spend.total_spend > 0 ? (amount / spend.total_spend) * 100 : 0;
                 return (
-                  <div
-                    key={item.id || item.name}
-                    onClick={() => item.id ? router.push(`/benchmarks?item=${item.id}`) : router.push("/review")}
-                    className="group cursor-pointer space-y-1.5"
-                    title={
-                      item.id
-                        ? `${item.name}: $${item.total_spend.toFixed(2)} (${pct.toFixed(1)}% of food spend) • Click to view benchmarks`
-                        : `${item.name}: $${item.total_spend.toFixed(2)} (${pct.toFixed(1)}% of food spend) • Click to map in review`
-                    }
-                  >
-                    <div className="flex justify-between items-center text-xs font-medium">
-                      <div className="flex items-center gap-1.5 min-w-0 pr-2">
-                        <span className="text-slate-700 dark:text-slate-300 font-semibold truncate group-hover:text-[#2f4a7d] dark:group-hover:text-blue-400 transition-colors">
-                          {item.name}
-                        </span>
-                        {item.category === "Unmapped" && (
-                          <span className="rounded bg-amber-100 dark:bg-amber-950/60 px-1.5 py-0.2 text-[9px] font-semibold text-amber-800 dark:text-amber-300 uppercase shrink-0">
-                            Review
-                          </span>
-                        )}
-                        <ArrowUpRight className="h-3 w-3 text-slate-400 group-hover:text-[#2f4a7d] dark:group-hover:text-blue-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </div>
-                      <span className="text-[#1b2b4a] dark:text-slate-100 font-semibold tabular-nums shrink-0">
-                        ${item.total_spend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
-                        <span className="text-slate-400 dark:text-slate-500 font-normal">({pct.toFixed(0)}%)</span>
+                  <div key={category}>
+                    <div className="mb-1.5 flex items-baseline justify-between text-[13px]">
+                      <span className="font-semibold capitalize text-ink">
+                        {category.replace(/_/g, " ")}
+                      </span>
+                      <span className="num text-ink-soft">
+                        ${money(amount)} &middot;{" "}
+                        <strong className="font-semibold text-ink">{pct.toFixed(0)}%</strong>
                       </span>
                     </div>
-                    <div className="h-2.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                    <div className="h-2.5 w-full overflow-hidden rounded-sm bg-rule-soft">
                       <div
-                        className="h-full bg-[#2f4a7d] dark:bg-blue-500 rounded-full transition-all duration-500 group-hover:bg-[#1b2b4a] dark:group-hover:bg-blue-400"
-                        style={{ width: `${Math.max(pct, 2)}%` }}
+                        className={`h-full rounded-sm ${RAMP[idx % RAMP.length]}`}
+                        style={{ width: `${Math.max(pct, 1)}%` }}
                       />
                     </div>
                   </div>
                 );
-              })
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="min-w-0 flex-[1_1_420px]">
+          <h2 className="display-sm text-xl">Top cost drivers</h2>
+          <p className="mb-6 mt-1.5 text-[13px] text-ink-muted">
+            The line items carrying most of your food cost.
+          </p>
+
+          <div className="flex flex-col">
+            {spend?.top_items && spend.top_items.length > 0 ? (
+              spend.top_items.slice(0, 5).map((item, idx) => (
+                <button
+                  key={item.id || item.name}
+                  type="button"
+                  onClick={() =>
+                    item.id ? router.push(`/benchmarks?item=${item.id}`) : router.push("/review")
+                  }
+                  title={
+                    item.id
+                      ? `Compare ${item.name} against the local market`
+                      : `Map ${item.name} to a catalogue ingredient`
+                  }
+                  className="flex w-full cursor-pointer items-center justify-between gap-4 border-b border-rule-soft py-3.5 text-left transition-colors hover:bg-panel"
+                >
+                  <span className="flex min-w-0 items-baseline gap-3">
+                    <span className="num w-[18px] font-display text-[11px] font-bold text-ramp-5">
+                      {String(idx + 1).padStart(2, "0")}
+                    </span>
+                    <span className="truncate text-[15px] font-semibold text-ink">{item.name}</span>
+                    {item.category === "Unmapped" && (
+                      <span className="shrink-0 rounded-sm bg-over-wash px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-over-ink">
+                        Unmapped
+                      </span>
+                    )}
+                  </span>
+                  <span className="flex shrink-0 items-baseline gap-3 whitespace-nowrap">
+                    <span className="num text-[13px] text-ink-muted">
+                      {item.pct_of_spend.toFixed(0)}%
+                    </span>
+                    <span className="num text-[15px] font-semibold text-ink">
+                      ${money(item.total_spend)}
+                    </span>
+                  </span>
+                </button>
+              ))
             ) : (
-              <div className="py-8 text-center text-xs text-slate-400">
-                Top cost drivers will populate automatically as invoices are processed.
-              </div>
+              <p className="py-8 text-center text-xs text-ink-muted">
+                Top cost drivers populate automatically as invoices are processed.
+              </p>
             )}
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Alert Inspection & Price-Creep Trajectory Modal */}
+      {/* Alert inspection */}
       {selectedAlert && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-[#131f37] overflow-hidden">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-slate-200 p-5 bg-[#f8fafc] dark:border-slate-800 dark:bg-[#0e182c]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-3xl overflow-hidden rounded border border-rule bg-panel shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-rule bg-paper-raised p-5">
               <div>
-                <h3 className="text-lg font-bold text-[#1b2b4a] dark:text-slate-100 flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5 text-[#2f4a7d] dark:text-blue-400" />
-                  {selectedAlert.item_name}
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Historical Price-Creep Trajectory & Supplier Renegotiation Leverage
+                <span className="eyebrow">Price trajectory</span>
+                <h3 className="display-sm mt-1.5 text-xl">{selectedAlert.item_name}</h3>
+                <p className="mt-1 text-xs text-ink-muted">
+                  Your invoiced price against your baseline and the local market corridor
                 </p>
               </div>
               <button
                 onClick={() => setSelectedAlert(null)}
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                aria-label="Close"
+                className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-rule text-ink-muted transition-colors hover:border-edge hover:text-ink"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
+            <div className="max-h-[70vh] overflow-y-auto p-6">
               {loadingAlertDetail ? (
-                <div className="py-12 text-center text-xs text-slate-400">
-                  <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-[#2f4a7d] border-t-transparent" />
-                  <p className="mt-2">Loading price history and regional market benchmarks...</p>
+                <div className="py-12 text-center text-xs text-ink-muted">
+                  <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+                  <p className="mt-2">Loading price history and local benchmarks…</p>
                 </div>
               ) : (
                 <PriceCreepLineChart
@@ -421,27 +454,22 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* Modal Footer */}
-            <div className="border-t border-slate-200 bg-[#f8fafc] dark:border-slate-800 dark:bg-[#0e182c] p-4 flex flex-wrap justify-between items-center gap-3 text-xs">
-              <span className="text-slate-500 dark:text-slate-400">
-                Estimated quarterly creep impact:{" "}
-                <strong className="text-rose-600 dark:text-rose-400 font-mono font-bold">
-                  +${selectedAlert.estimated_dollar_impact.toFixed(2)}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-rule bg-paper-raised p-4">
+              <span className="text-xs text-ink-soft">
+                Estimated impact:{" "}
+                <strong className="num font-bold text-over-ink">
+                  +${money(selectedAlert.estimated_dollar_impact)}
                 </strong>
               </span>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2.5">
                 <button
                   type="button"
                   onClick={() => router.push(`/benchmarks?item=${selectedAlert.canonical_item_id}`)}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#1b2b4a] px-3.5 py-1.5 font-bold text-white shadow-xs hover:bg-[#2f4a7d] transition-colors cursor-pointer dark:bg-blue-600 dark:hover:bg-blue-500"
+                  className="pill-primary"
                 >
-                  <Scale className="h-3.5 w-3.5" /> Full Regional Benchmark <ExternalLink className="h-3 w-3" />
+                  Full local benchmark
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedAlert(null)}
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer dark:border-slate-700 dark:bg-[#0e182c] dark:text-slate-300"
-                >
+                <button type="button" onClick={() => setSelectedAlert(null)} className="pill-secondary">
                   Close
                 </button>
               </div>

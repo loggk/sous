@@ -153,42 +153,42 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     if (dialogState?.icon) return dialogState.icon;
     switch (dialogState?.variant) {
       case "danger":
-        return <Trash2 className="h-5 w-5 text-red-600 dark:text-red-400" />;
+        return <Trash2 className="h-5 w-5 text-over" />;
       case "warning":
-        return <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />;
+        return <AlertTriangle className="h-5 w-5 text-over" />;
       case "success":
-        return <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />;
+        return <CheckCircle2 className="h-5 w-5 text-under" />;
       case "info":
       default:
-        return <Info className="h-5 w-5 text-[#2f4a7d] dark:text-blue-400" />;
+        return <Info className="h-5 w-5 text-accent" />;
     }
   };
 
   const getIconBg = () => {
     switch (dialogState?.variant) {
       case "danger":
-        return "bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900/50";
+        return "bg-over-wash";
       case "warning":
-        return "bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-900/50";
+        return "bg-over-wash";
       case "success":
-        return "bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-900/50";
+        return "bg-under-wash";
       case "info":
       default:
-        return "bg-[#f0f4fa] dark:bg-blue-950/50 border border-blue-200/60 dark:border-blue-900/50";
+        return "bg-accent-wash";
     }
   };
 
   const getConfirmBtnClass = () => {
     switch (dialogState?.variant) {
       case "danger":
-        return "bg-red-600 hover:bg-red-700 text-white dark:bg-red-600 dark:hover:bg-red-500 shadow-xs";
+        return "bg-over text-on-ink hover:brightness-95";
       case "warning":
-        return "bg-amber-600 hover:bg-amber-700 text-white dark:bg-amber-600 dark:hover:bg-amber-500 shadow-xs";
+        return "bg-over text-on-ink hover:brightness-95";
       case "success":
-        return "bg-emerald-600 hover:bg-emerald-700 text-white dark:bg-emerald-600 dark:hover:bg-emerald-500 shadow-xs";
+        return "bg-under text-on-ink hover:brightness-95";
       case "info":
       default:
-        return "bg-[#1b2b4a] hover:bg-[#2f4a7d] text-white dark:bg-blue-600 dark:hover:bg-blue-500 shadow-xs";
+        return "bg-ink text-on-ink hover:bg-accent";
     }
   };
 
@@ -198,19 +198,19 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
 
       {dialogState?.isOpen && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4 animate-in fade-in duration-150"
           onClick={() => handleClose(false)}
           role="dialog"
           aria-modal="true"
         >
           <div
-            className="relative w-full max-w-md transform rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl transition-all dark:border-slate-800 dark:bg-[#131f37]"
+            className="relative w-full max-w-md transform rounded border border-rule bg-panel p-6 shadow-2xl transition-all"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Top Close Button */}
             <button
               onClick={() => handleClose(false)}
-              className="absolute right-4 top-4 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer"
+              className="absolute right-3 top-3 flex h-11 w-11 cursor-pointer items-center justify-center rounded-full text-ink-muted transition-colors hover:text-ink"
               aria-label="Close dialog"
             >
               <X className="h-4 w-4" />
@@ -218,28 +218,28 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
 
             {/* Icon + Title + Message */}
             <div className="flex items-start gap-4">
-              <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${getIconBg()}`}>
+              <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded ${getIconBg()}`}>
                 {getIcon()}
               </div>
 
               <div className="flex-1 pr-6">
-                <h3 className="text-base sm:text-lg font-bold text-[#1b2b4a] dark:text-slate-100">
+                <h3 className="display-sm text-base sm:text-lg">
                   {dialogState.title}
                 </h3>
-                <div className="mt-1.5 text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                <div className="mt-1.5 text-xs sm:text-sm text-ink-soft leading-relaxed">
                   {dialogState.message}
                 </div>
               </div>
             </div>
 
             {/* Actions */}
-            <div className="mt-6 flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <div className="mt-6 flex items-center justify-end gap-3 border-t border-rule-soft pt-4">
               {dialogState.type === "confirm" ? (
                 <>
                   <button
                     type="button"
                     onClick={() => handleClose(false)}
-                    className="cursor-pointer rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors dark:border-slate-700 dark:bg-[#0e182c] dark:text-slate-200 dark:hover:bg-slate-800"
+                    className="pill-secondary"
                   >
                     {dialogState.cancelText || "Cancel"}
                   </button>
@@ -247,7 +247,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                     ref={confirmBtnRef}
                     type="button"
                     onClick={() => handleClose(true)}
-                    className={`cursor-pointer rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold transition-all ${getConfirmBtnClass()}`}
+                    className={`inline-flex min-h-11 cursor-pointer items-center justify-center rounded-full px-5.5 font-display text-xs font-bold uppercase tracking-[0.08em] transition-all ${getConfirmBtnClass()}`}
                   >
                     {dialogState.confirmText}
                   </button>
@@ -257,7 +257,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                   ref={confirmBtnRef}
                   type="button"
                   onClick={() => handleClose(true)}
-                  className={`cursor-pointer w-full rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold transition-all ${getConfirmBtnClass()}`}
+                  className={`inline-flex min-h-11 w-full cursor-pointer items-center justify-center rounded-full px-5.5 font-display text-xs font-bold uppercase tracking-[0.08em] transition-all ${getConfirmBtnClass()}`}
                 >
                   {dialogState.confirmText}
                 </button>

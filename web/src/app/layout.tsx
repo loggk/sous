@@ -1,12 +1,21 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Montserrat, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/Navbar";
 import { ConfirmProvider } from "@/context/ConfirmContext";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+/* Inter carries the data; Montserrat carries the logo's voice — the heavy
+   geometric caps of SOUS and the wide-tracked COLLECTIVE beneath it. */
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
+
+const montserrat = Montserrat({
+  variable: "--font-montserrat",
+  subsets: ["latin"],
+  weight: ["600", "700", "800"],
 });
 
 const geistMono = Geist_Mono({
@@ -28,7 +37,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${montserrat.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
         <script
@@ -49,7 +58,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="min-h-full flex flex-col bg-[#f8fafc] text-slate-900 dark:bg-[#0b1324] dark:text-slate-100">
+      <body className="min-h-full flex flex-col bg-paper text-ink">
         <ConfirmProvider>
           <Navbar />
           <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">

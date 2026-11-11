@@ -2,17 +2,27 @@
 
 import { useEffect, useState, useRef } from "react";
 import { api, InvoiceSummary, InvoiceDetail } from "@/lib/api";
-import { UploadCloud, FileText, CheckCircle2, Clock, X, Trash2, ExternalLink } from "lucide-react";
+import { CheckCircle2, Clock, FileText, UploadCloud, X } from "lucide-react";
 import { useConfirm } from "@/context/ConfirmContext";
+
+function money(value: number, decimals = 2) {
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}
 
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<InvoiceSummary[]>([]);
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceDetail | null>(null);
-  const [modalTab, setModalTab] = useState<"lines" | "pdf">("lines");
+  const [detailTab, setDetailTab] = useState<"lines" | "pdf">("lines");
   const [directPdfUrl, setDirectPdfUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{ type: "success" | "warning" | "error"; message: string } | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "passed" | "attention">("all");
+  const [supplierFilter, setSupplierFilter] = useState<string>("all");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { confirm, alert } = useConfirm();
 
@@ -75,23 +85,22 @@ export default function InvoicesPage() {
       if (res.message.includes("Duplicate")) {
         setUploadStatus({
           type: "warning",
-          message: `Duplicate document detected for "${file.name}" (SHA-256: ${res.content_sha256.slice(0, 10)}...). Existing record retrieved.`,
+          message: `You have already uploaded “${file.name}”. The existing record was kept.`,
         });
       } else {
         setUploadStatus({
           type: "success",
-          message: `Invoice "${file.name}" uploaded successfully! Background extraction running...`,
+          message: `“${file.name}” is in. Reading the lines now — the table updates on its own.`,
         });
       }
 
       await loadInvoices();
-      // Poll automatically so background extraction updates the table as soon as completed
       setTimeout(() => loadInvoices(), 1500);
       setTimeout(() => loadInvoices(), 3500);
     } catch (err: any) {
       setUploadStatus({
         type: "error",
-        message: err.message || "Failed to upload invoice.",
+        message: err.message || "That upload didn't go through.",
       });
     } finally {
       setUploading(false);
@@ -99,15 +108,19 @@ export default function InvoicesPage() {
     }
   }
 
-  async function openInvoiceModal(invoiceId: string) {
+  async function toggleInvoice(invoiceId: string) {
+    if (selectedInvoice?.id === invoiceId) {
+      setSelectedInvoice(null);
+      return;
+    }
     try {
       const detail = await api.getInvoiceDetail(invoiceId);
       setSelectedInvoice(detail);
-      setModalTab("lines");
+      setDetailTab("lines");
     } catch (err: any) {
       await alert({
-        title: "Unable to Load Invoice",
-        message: "Failed to load invoice details: " + (err.message || "Unknown error"),
+        title: "Couldn't open that invoice",
+        message: err.message || "Unknown error",
         variant: "danger",
       });
     }
@@ -115,392 +128,463 @@ export default function InvoicesPage() {
 
   async function handleDeleteInvoice(invoiceId: string, name: string) {
     const confirmed = await confirm({
-      title: "Delete Invoice",
-      message: `Are you sure you want to delete "${name}"? All associated line items, price histories, and extracted data will be permanently removed.`,
-      confirmText: "Delete Invoice",
-      cancelText: "Keep Invoice",
+      title: "Delete this invoice?",
+      message: `“${name}” and everything read from it — line items, price history, the lot — will be removed for good.`,
+      confirmText: "Delete it",
+      cancelText: "Keep it",
       variant: "danger",
     });
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
+
     try {
       await api.deleteInvoice(invoiceId);
-      setUploadStatus({
-        type: "success",
-        message: `Deleted "${name}" successfully.`,
-      });
-      if (selectedInvoice?.id === invoiceId) {
-        setSelectedInvoice(null);
-      }
+      setUploadStatus({ type: "success", message: `Deleted “${name}”.` });
+      if (selectedInvoice?.id === invoiceId) setSelectedInvoice(null);
       await loadInvoices();
     } catch (err: any) {
-      setUploadStatus({
-        type: "error",
-        message: err.message || "Failed to delete invoice.",
-      });
+      setUploadStatus({ type: "error", message: err.message || "Couldn't delete that invoice." });
       await alert({
-        title: "Delete Failed",
-        message: err.message || "Failed to delete invoice.",
+        title: "Delete failed",
+        message: err.message || "Couldn't delete that invoice.",
         variant: "danger",
       });
     }
   }
 
+  const suppliers = Array.from(
+    new Set(invoices.map((i) => i.supplier_name).filter((s): s is string => Boolean(s)))
+  ).sort();
+
+  const needsAttention = invoices.filter((i) => i.validation_status !== "passed").length;
+
+  const filtered = invoices.filter((inv) => {
+    if (statusFilter === "passed" && inv.validation_status !== "passed") return false;
+    if (statusFilter === "attention" && inv.validation_status === "passed") return false;
+    if (supplierFilter !== "all" && inv.supplier_name !== supplierFilter) return false;
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      (inv.file_name || "").toLowerCase().includes(q) ||
+      inv.invoice_number.toLowerCase().includes(q) ||
+      (inv.supplier_name || "").toLowerCase().includes(q)
+    );
+  });
+
+  const pdfUrlFor = (inv: InvoiceDetail) =>
+    directPdfUrl ||
+    (inv.pdf_url?.startsWith("http")
+      ? inv.pdf_url
+      : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${inv.pdf_url || `/invoices/${inv.id}/pdf`}`);
+
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="pb-2 border-b border-slate-200/60 dark:border-slate-800">
-        <h1 className="text-2xl font-bold tracking-tight text-[#1b2b4a] dark:text-slate-100 sm:text-3xl">
-          Invoices & Ingestion
-        </h1>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Upload supplier delivery receipts (PDF / JPG / PNG / HEIC). Each document is deduplicated via SHA-256 and asynchronously parsed into normalized unit economics.
+    <div>
+      {/* Page head */}
+      <div className="pb-7">
+        <span className="eyebrow">Ingestion</span>
+        <h1 className="display-xl mt-2 text-4xl sm:text-[46px]">Invoices</h1>
+        <p className="mt-2.5 max-w-2xl text-sm leading-relaxed text-ink-soft">
+          Drop a delivery receipt in and Sous reads it, normalises every pack size to a base unit,
+          and files it against the right supplier. PDF, JPG, PNG or HEIC.
         </p>
       </div>
 
-      {/* Upload Dropzone */}
-      <div
-        onClick={() => fileInputRef.current?.click()}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => {
-          e.preventDefault();
-          handleFileUpload(e.dataTransfer.files);
-        }}
-        className="group relative cursor-pointer rounded-2xl border-2 border-dashed border-slate-300 bg-white p-7 text-center transition-all hover:border-[#2f4a7d] hover:bg-[#f6f8fc] dark:border-slate-700 dark:bg-[#131f37] dark:hover:border-blue-400 dark:hover:bg-[#1a2c4e]/50 shadow-xs"
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".pdf,.jpg,.jpeg,.png,.heic"
-          className="hidden"
-          onChange={(e) => handleFileUpload(e.target.files)}
-        />
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#f0f4fa] text-[#2f4a7d] transition-transform group-hover:scale-105 dark:bg-[#1a2c4e] dark:text-blue-300">
-          {uploading ? (
-            <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#2f4a7d] dark:border-blue-400 border-t-transparent" />
-          ) : (
-            <UploadCloud className="h-6 w-6" />
-          )}
+      {/* Drop zone and the state of the pile */}
+      <section className="section-open section-close flex flex-wrap items-stretch gap-8 py-7">
+        <div className="min-w-0 flex-[999_1_440px]">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              handleFileUpload(e.dataTransfer.files);
+            }}
+            className="flex w-full cursor-pointer flex-col items-center gap-2.5 rounded border-2 border-dashed border-edge bg-panel px-6 py-9 text-center transition-colors hover:border-accent"
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,.heic"
+              className="hidden"
+              onChange={(e) => handleFileUpload(e.target.files)}
+            />
+            {uploading ? (
+              <div className="h-7 w-7 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+            ) : (
+              <UploadCloud className="h-7 w-7 text-accent" />
+            )}
+            <span className="display-sm text-[17px]">
+              {uploading ? "Reading it now…" : "Drop invoices here"}
+            </span>
+            <span className="text-[13px] text-ink-soft">
+              or <span className="font-semibold text-accent underline">browse your files</span> &mdash;
+              up to 25&nbsp;MB each
+            </span>
+            <span className="text-xs text-ink-muted">
+              Duplicates are caught by content hash before anything is filed twice
+            </span>
+          </button>
         </div>
-        <h3 className="mt-3 text-sm font-bold text-[#1b2b4a] dark:text-slate-100">
-          {uploading ? "Uploading & hashing..." : "Click or drag invoice files here to ingest"}
-        </h3>
-        <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-          Supports multi-page PDF, JPG, PNG, and HEIC files up to 25MB
-        </p>
-      </div>
 
-      {/* Upload Feedback Toast / Banner */}
+        <div className="flex min-w-0 max-w-[360px] flex-[1_1_280px] flex-col justify-center">
+          <div className="flex items-baseline justify-between gap-3 border-b border-rule-soft py-3">
+            <span className="text-[13px] text-ink-soft">Filed</span>
+            <span className="num display-sm text-lg">{invoices.length}</span>
+          </div>
+          <div className="flex items-baseline justify-between gap-3 border-b border-rule-soft py-3">
+            <span className="text-[13px] text-ink-soft">Suppliers</span>
+            <span className="num display-sm text-lg">{suppliers.length}</span>
+          </div>
+          <div className="flex items-baseline justify-between gap-3 py-3">
+            <span className="text-[13px] text-ink-soft">Needs a look</span>
+            <span className={`num display-sm text-lg ${needsAttention > 0 ? "text-over-ink" : ""}`}>
+              {needsAttention}
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {/* Upload feedback */}
       {uploadStatus && (
         <div
-          className={`rounded-xl p-4 text-sm flex items-start justify-between ${
+          className={`mt-5 flex items-start justify-between gap-4 rounded px-4 py-3.5 text-sm ${
             uploadStatus.type === "success"
-              ? "border border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300"
-              : uploadStatus.type === "warning"
-              ? "border border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300"
-              : "border border-red-200 bg-red-50 text-red-800 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300"
+              ? "bg-under-wash text-under-ink"
+              : "bg-over-wash text-over-ink"
           }`}
         >
           <span>{uploadStatus.message}</span>
-          <button onClick={() => setUploadStatus(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+          <button
+            onClick={() => setUploadStatus(null)}
+            aria-label="Dismiss"
+            className="shrink-0 cursor-pointer opacity-70 hover:opacity-100"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
       )}
 
-      {/* Invoices List Table */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-xs overflow-hidden dark:border-slate-800 dark:bg-[#131f37]">
-        <div className="border-b border-slate-200/80 p-5 flex items-center justify-between dark:border-slate-800">
-          <h2 className="text-base font-bold text-[#1b2b4a] dark:text-slate-100">
-            Processed Invoices ({invoices.length})
-          </h2>
-          <span className="text-xs text-slate-400 dark:text-slate-500">Click any row to inspect line breakdown</span>
+      {/* Filters */}
+      <section className="flex flex-wrap items-end justify-between gap-5 pb-2.5 pt-6">
+        <div className="max-w-[420px] flex-[1_1_280px]">
+          <label htmlFor="inv-q" className="label-caps block pb-2">
+            Find an invoice
+          </label>
+          <input
+            id="inv-q"
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="File name, invoice number or supplier"
+            className="field"
+          />
+        </div>
+
+        <fieldset className="m-0 border-0 p-0">
+          <legend className="label-caps pb-2">Show</legend>
+          <div className="flex flex-wrap gap-2">
+            {([
+              ["all", `All ${invoices.length}`],
+              ["attention", "Needs a look"],
+              ["passed", "Checked out"],
+            ] as const).map(([key, label]) => (
+              <label
+                key={key}
+                className={`inline-flex min-h-11 cursor-pointer items-center rounded-full px-4 text-[13px] transition-colors ${
+                  statusFilter === key
+                    ? "border border-ink bg-ink font-bold text-on-ink"
+                    : "border border-edge font-semibold text-ink-soft hover:text-ink"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="invoice-filter"
+                  checked={statusFilter === key}
+                  onChange={() => setStatusFilter(key)}
+                  className="absolute h-px w-px opacity-0"
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        {suppliers.length > 0 && (
+          <div>
+            <label htmlFor="inv-supplier" className="label-caps block pb-2">
+              Supplier
+            </label>
+            <select
+              id="inv-supplier"
+              value={supplierFilter}
+              onChange={(e) => setSupplierFilter(e.target.value)}
+              className="min-h-11 cursor-pointer rounded-full border border-edge bg-panel px-4 text-sm text-ink"
+            >
+              <option value="all">All {suppliers.length} suppliers</option>
+              {suppliers.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </section>
+
+      {/* The pile */}
+      <section>
+        <div className="hidden grid-cols-[minmax(0,3fr)_minmax(0,1.1fr)_minmax(0,1.8fr)_minmax(0,1.1fr)_84px] border-b-2 border-ink pb-2.5 pt-3.5 sm:grid">
+          <span className="label-caps">Document</span>
+          <span className="label-caps">Date</span>
+          <span className="label-caps">Check</span>
+          <span className="label-caps text-right">Total</span>
+          <span className="label-caps text-right">File</span>
         </div>
 
         {loading ? (
-          <div className="p-8 text-center text-sm text-slate-500 dark:text-slate-400">Loading invoices...</div>
-        ) : invoices.length === 0 ? (
-          <div className="p-8 text-center text-sm text-slate-500 dark:text-slate-400">
-            No invoices found. Use the upload box above to ingest your first invoice.
-          </div>
+          <p className="py-10 text-center text-sm text-ink-soft">Loading your invoices…</p>
+        ) : filtered.length === 0 ? (
+          <p className="py-10 text-center text-sm text-ink-soft">
+            {invoices.length === 0
+              ? "Nothing filed yet — drop your first invoice in above."
+              : "No invoices match those filters."}
+          </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-[#f8fafc] border-b border-slate-200 text-xs font-semibold text-slate-500 dark:bg-[#0e182c] dark:border-slate-800 dark:text-slate-400">
-                <tr>
-                  <th className="px-5 py-3.5 font-semibold">Document / Invoice</th>
-                  <th className="px-5 py-3.5 font-semibold">Invoice Date</th>
-                  <th className="px-5 py-3.5 font-semibold">Validation Status</th>
-                  <th className="px-5 py-3.5 font-semibold text-right">Total</th>
-                  <th className="px-5 py-3.5 font-semibold text-right">PDF</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {invoices.map((inv) => (
-                  <tr
-                    key={inv.id}
-                    onClick={() => openInvoiceModal(inv.id)}
-                    className="group cursor-pointer hover:bg-[#f8fafc] dark:hover:bg-[#1a2c4e]/30 transition-colors"
-                  >
-                    <td className="px-5 py-3.5">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f0f4fa] text-[#2f4a7d] group-hover:bg-[#e4ecf7] dark:bg-[#1a2c4e] dark:text-blue-300 dark:group-hover:bg-[#223963] transition-colors">
-                          <FileText className="h-5 w-5" />
-                        </div>
-                        <div className="flex flex-col min-w-0">
-                          <span className="font-semibold text-[#1b2b4a] dark:text-slate-100 truncate group-hover:text-[#2f4a7d] dark:group-hover:text-blue-400 transition-colors">
-                            {inv.file_name || inv.invoice_number}
-                          </span>
-                          <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-                            <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400">{inv.invoice_number}</span>
-                            {inv.supplier_name && (
-                              <>
-                                <span>&bull;</span>
-                                <span className="truncate">{inv.supplier_name}</span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3.5 text-slate-600 dark:text-slate-300">
-                      {inv.invoice_date}
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-md px-2.5 py-0.5 text-xs font-medium ${
-                          inv.validation_status === "passed"
-                            ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-500/30"
-                            : "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-500/30"
-                        }`}
-                      >
-                        {inv.validation_status === "passed" ? (
-                          <CheckCircle2 className="h-3 w-3" />
-                        ) : (
-                          <Clock className="h-3 w-3" />
-                        )}
-                        {inv.validation_status}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3.5 text-right font-semibold tabular-nums text-[#1b2b4a] dark:text-slate-100">
-                      ${inv.total.toFixed(2)}
-                    </td>
-                    <td className="px-5 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenPdf(inv)}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-[#2f4a7d] hover:border-blue-300 dark:border-slate-700 dark:bg-[#1a2c4e]/50 dark:text-slate-300 dark:hover:bg-[#1a2c4e] transition-colors cursor-pointer"
-                        title="Open original PDF invoice in new tab"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                        PDF
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Invoice Line Breakdown Modal */}
-      {selectedInvoice && (() => {
-        const pdfUrl =
-          directPdfUrl ||
-          (selectedInvoice.pdf_url?.startsWith("http")
-            ? selectedInvoice.pdf_url
-            : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${selectedInvoice.pdf_url || `/invoices/${selectedInvoice.id}/pdf`}`);
-
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-            <div className="w-full max-w-5xl max-h-[90vh] flex flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-[#131f37] overflow-hidden">
-              {/* Modal Header */}
-              <div className="flex items-center justify-between border-b border-slate-200 p-5 bg-[#f8fafc] dark:border-slate-800 dark:bg-[#0e182c]">
-                <div>
-                  <h3 className="text-lg font-bold text-[#1b2b4a] dark:text-slate-100 flex items-center gap-2">
-                    {selectedInvoice.file_name || selectedInvoice.invoice_number}
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Invoice #: <span className="font-mono font-medium">{selectedInvoice.invoice_number}</span>
-                    {selectedInvoice.supplier_name && ` | Supplier: ${selectedInvoice.supplier_name}`}
-                    {` | Date: ${selectedInvoice.invoice_date}`}
-                    {selectedInvoice.extraction_provider && ` | Provider: ${selectedInvoice.extraction_provider}`}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
+          filtered.map((inv) => {
+            const isOpen = selectedInvoice?.id === inv.id;
+            const passed = inv.validation_status === "passed";
+            return (
+              <div
+                key={inv.id}
+                className={`border-b border-rule-soft ${isOpen ? "bg-panel" : ""}`}
+                style={isOpen ? { borderLeft: "3px solid var(--ink)" } : undefined}
+              >
+                <div
+                  className={`grid grid-cols-2 items-center gap-y-2 py-4 sm:grid-cols-[minmax(0,3fr)_minmax(0,1.1fr)_minmax(0,1.8fr)_minmax(0,1.1fr)_84px] sm:gap-y-0 ${
+                    isOpen ? "pl-3.5" : ""
+                  }`}
+                >
                   <button
                     type="button"
-                    onClick={() => handleOpenPdf(selectedInvoice)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#2f4a7d]/20 bg-[#f0f4fa] px-3 py-1.5 text-xs font-bold text-[#2f4a7d] hover:bg-[#e4ecf7] dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-300 transition-colors shadow-2xs cursor-pointer"
-                    title="Open original PDF invoice in new tab"
+                    onClick={() => toggleInvoice(inv.id)}
+                    aria-expanded={isOpen}
+                    className="col-span-2 flex min-w-0 cursor-pointer items-center gap-3.5 text-left sm:col-span-1"
                   >
-                    <FileText className="h-4 w-4" />
-                    Open PDF
-                    <ExternalLink className="h-3 w-3" />
+                    <FileText
+                      className={`h-5 w-5 shrink-0 ${passed ? "text-accent" : "text-over"}`}
+                    />
+                    <span className="min-w-0">
+                      <span className="block truncate text-[15px] font-semibold text-ink">
+                        {inv.file_name || inv.invoice_number}
+                      </span>
+                      <span className="block truncate text-xs text-ink-muted">
+                        {inv.invoice_number}
+                        {inv.supplier_name ? ` · ${inv.supplier_name}` : ""}
+                      </span>
+                    </span>
                   </button>
-                  <button
-                    onClick={() => setSelectedInvoice(null)}
-                    className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
+
+                  <span className="text-[13px] text-ink-soft">{inv.invoice_date}</span>
+
+                  <span>
+                    {passed ? (
+                      <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-under-ink">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-under" />
+                        Lines match the total
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-over-ink">
+                        <Clock className="h-3.5 w-3.5 text-over" />
+                        {inv.validation_status}
+                      </span>
+                    )}
+                  </span>
+
+                  <span className="num font-display text-[15px] font-bold text-ink sm:text-right">
+                    ${money(inv.total)}
+                  </span>
+
+                  <span className="sm:text-right">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenPdf(inv)}
+                      className="cursor-pointer text-[12.5px] font-semibold text-accent hover:underline"
+                    >
+                      PDF &nearr;
+                    </button>
+                  </span>
                 </div>
-              </div>
 
-              {/* View Switcher Tabs */}
-              <div className="flex items-center gap-2 border-b border-slate-200 bg-[#f8fafc] px-5 py-2.5 dark:border-slate-800 dark:bg-[#0e182c]">
-                <button
-                  type="button"
-                  onClick={() => setModalTab("lines")}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
-                    modalTab === "lines"
-                      ? "bg-[#2f4a7d] text-white dark:bg-blue-600 shadow-2xs"
-                      : "text-slate-600 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-800"
-                  }`}
-                >
-                  Line Items Breakdown ({selectedInvoice.lines.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setModalTab("pdf")}
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
-                    modalTab === "pdf"
-                      ? "bg-[#2f4a7d] text-white dark:bg-blue-600 shadow-2xs"
-                      : "text-slate-600 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-800"
-                  }`}
-                >
-                  <FileText className="h-3.5 w-3.5" />
-                  Original PDF Document View
-                </button>
-              </div>
+                {/* Inline expansion: what was on it */}
+                {isOpen && selectedInvoice && (
+                  <div className="px-0 pb-7 pl-3.5 pr-6 pt-1">
+                    <div className="flex flex-wrap items-center justify-between gap-3 pb-3.5">
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDetailTab("lines")}
+                          className={`min-h-11 cursor-pointer rounded-full px-4 text-[13px] transition-colors ${
+                            detailTab === "lines"
+                              ? "border border-ink bg-ink font-bold text-on-ink"
+                              : "border border-edge font-semibold text-ink-soft hover:text-ink"
+                          }`}
+                        >
+                          {selectedInvoice.lines.length} lines
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDetailTab("pdf")}
+                          className={`min-h-11 cursor-pointer rounded-full px-4 text-[13px] transition-colors ${
+                            detailTab === "pdf"
+                              ? "border border-ink bg-ink font-bold text-on-ink"
+                              : "border border-edge font-semibold text-ink-soft hover:text-ink"
+                          }`}
+                        >
+                          Original document
+                        </button>
+                      </div>
+                      <span className="text-xs text-ink-muted">
+                        {selectedInvoice.extraction_provider
+                          ? `Read by ${selectedInvoice.extraction_provider}`
+                          : "Every pack normalised to a base unit"}
+                      </span>
+                    </div>
 
-              {/* Modal Body */}
-              {modalTab === "lines" ? (
-                <div className="flex-1 overflow-y-auto p-5">
-                  <table className="w-full text-left text-xs">
-                    <thead className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
-                      <tr>
-                        <th className="pb-2.5 font-semibold">Line</th>
-                        <th className="pb-2.5 font-semibold">Raw Description</th>
-                        <th className="pb-2.5 font-semibold">Supplier SKU</th>
-                        <th className="pb-2.5 font-semibold">Pack</th>
-                        <th className="pb-2.5 text-right font-semibold">Qty</th>
-                        <th className="pb-2.5 text-right font-semibold">Unit Price</th>
-                        <th className="pb-2.5 text-right font-semibold">Line Total</th>
-                        <th className="pb-2.5 text-right font-semibold" title="Normalized cost per standard base unit (e.g. $/kg, $/L) used for market comparisons">
-                          Base Price
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {selectedInvoice.lines.map((l) => (
-                        <tr key={l.id} className="hover:bg-[#f8fafc] dark:hover:bg-[#1a2c4e]/30 transition-colors">
-                          <td className="py-2.5 text-slate-400 dark:text-slate-500">{l.line_index}</td>
-                          <td className="py-2.5 font-medium text-[#1b2b4a] dark:text-slate-100">
-                            {l.raw_description}
-                            {l.line_kind !== "item" && (
-                              <span className="ml-2 rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-500 dark:text-slate-400 uppercase">
-                                {l.line_kind}
+                    {detailTab === "lines" ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[720px] border-collapse text-[13px]">
+                          <thead>
+                            <tr>
+                              <th className="label-caps border-b border-rule py-2 text-left">
+                                As printed on the invoice
+                              </th>
+                              <th className="label-caps border-b border-rule px-3 py-2 text-left">Pack</th>
+                              <th className="label-caps border-b border-rule px-3 py-2 text-right">Qty</th>
+                              <th className="label-caps border-b border-rule px-3 py-2 text-right">Unit</th>
+                              <th className="label-caps border-b border-rule px-3 py-2 text-right">Line</th>
+                              <th className="label-caps border-b border-rule py-2 pl-3 text-right text-accent">
+                                Per base unit
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {selectedInvoice.lines.map((l) => (
+                              <tr key={l.id}>
+                                <td className="border-b border-rule-soft py-2.5">
+                                  <span className="font-semibold text-ink">{l.raw_description}</span>
+                                  {l.line_kind !== "item" && (
+                                    <span className="ml-2 rounded-sm bg-chip px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.12em] text-ink-soft">
+                                      {l.line_kind}
+                                    </span>
+                                  )}
+                                  {l.supplier_sku && (
+                                    <span className="block text-[11.5px] text-ink-muted">
+                                      SKU {l.supplier_sku}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="border-b border-rule-soft px-3 py-2.5 text-ink-soft">
+                                  {l.pack_descriptor || "—"}
+                                </td>
+                                <td className="num border-b border-rule-soft px-3 py-2.5 text-right text-ink-soft">
+                                  {l.quantity}
+                                </td>
+                                <td className="num border-b border-rule-soft px-3 py-2.5 text-right text-ink-soft">
+                                  ${l.unit_price.toFixed(2)}
+                                </td>
+                                <td className="num border-b border-rule-soft px-3 py-2.5 text-right font-semibold text-ink">
+                                  ${l.line_total.toFixed(2)}
+                                </td>
+                                <td className="num border-b border-rule-soft py-2.5 pl-3 text-right font-bold text-accent">
+                                  {l.price_per_base_unit ? `$${l.price_per_base_unit.toFixed(2)}` : "—"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col">
+                        <div className="flex items-center justify-between pb-2">
+                          <span className="text-xs text-ink-muted">The document as it arrived</span>
+                          <a
+                            href={pdfUrlFor(selectedInvoice)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs font-semibold text-accent no-underline hover:underline"
+                          >
+                            Open in a new tab &nearr;
+                          </a>
+                        </div>
+                        <iframe
+                          src={pdfUrlFor(selectedInvoice)}
+                          className="min-h-[500px] w-full rounded border border-rule bg-panel"
+                          title={`Invoice ${selectedInvoice.invoice_number}`}
+                        />
+                      </div>
+                    )}
+
+                    <div className="mt-5 flex flex-wrap items-center justify-between gap-4 border-t border-rule pt-4">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenPdf(selectedInvoice)}
+                          className="pill-primary"
+                        >
+                          Open original PDF
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleDeleteInvoice(
+                              selectedInvoice.id,
+                              selectedInvoice.file_name || selectedInvoice.invoice_number
+                            )
+                          }
+                          className="min-h-11 cursor-pointer px-2 font-display text-xs font-bold uppercase tracking-[0.08em] text-over-ink hover:underline"
+                        >
+                          Delete invoice
+                        </button>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-5 text-xs">
+                        {selectedInvoice.subtotal != null &&
+                        selectedInvoice.tax != null &&
+                        selectedInvoice.tax > 0 &&
+                        selectedInvoice.subtotal !== selectedInvoice.total ? (
+                          <>
+                            <span className="text-ink-muted">
+                              Subtotal{" "}
+                              <span className="num font-semibold text-ink-soft">
+                                ${money(selectedInvoice.subtotal)}
                               </span>
-                            )}
-                          </td>
-                          <td className="py-2.5 text-slate-500 dark:text-slate-400">{l.supplier_sku || "—"}</td>
-                          <td className="py-2.5 text-slate-600 dark:text-slate-300">{l.pack_descriptor || "—"}</td>
-                          <td className="py-2.5 text-right tabular-nums text-slate-700 dark:text-slate-300">{l.quantity}</td>
-                          <td className="py-2.5 text-right tabular-nums text-slate-700 dark:text-slate-300">${l.unit_price.toFixed(2)}</td>
-                          <td className="py-2.5 text-right tabular-nums font-semibold text-[#1b2b4a] dark:text-slate-100">${l.line_total.toFixed(2)}</td>
-                          <td className="py-2.5 text-right tabular-nums text-[#2f4a7d] dark:text-blue-400 font-semibold">
-                            {l.price_per_base_unit ? `$${l.price_per_base_unit.toFixed(2)}` : "—"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="flex-1 min-h-[550px] flex flex-col p-4 bg-slate-100 dark:bg-[#0a1120]">
-                  <div className="flex items-center justify-between mb-2 px-1">
-                    <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                      <FileText className="h-3.5 w-3.5 text-[#2f4a7d] dark:text-blue-400" />
-                      Document Stream via Supabase Storage
-                    </span>
-                    <a
-                      href={pdfUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs font-semibold text-[#2f4a7d] hover:underline dark:text-blue-400"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" /> Open in full window
-                    </a>
+                            </span>
+                            <span className="text-ink-muted">
+                              Tax{" "}
+                              <span className="num font-semibold text-ink-soft">
+                                ${money(selectedInvoice.tax)}
+                              </span>
+                            </span>
+                          </>
+                        ) : null}
+                        <span className="num display-sm text-sm">
+                          Total ${money(selectedInvoice.total)}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <iframe
-                    src={pdfUrl}
-                    className="w-full flex-1 min-h-[500px] rounded-xl border border-slate-200 dark:border-slate-800 bg-white"
-                    title="Invoice PDF"
-                  />
-                </div>
-              )}
-
-              {/* Modal Footer */}
-              <div className="border-t border-slate-200 bg-[#f8fafc] dark:border-slate-800 dark:bg-[#0e182c] p-4 flex flex-wrap justify-between items-center gap-3 text-sm">
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                    Validation:
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold ${
-                        selectedInvoice.validation_status === "passed"
-                          ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
-                          : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
-                      }`}
-                    >
-                      {selectedInvoice.validation_status === "passed" ? (
-                        <CheckCircle2 className="h-3 w-3" />
-                      ) : (
-                        <Clock className="h-3 w-3" />
-                      )}
-                      {selectedInvoice.validation_status}
-                    </span>
-                  </span>
-                  <button
-                    onClick={() => handleDeleteInvoice(selectedInvoice.id, selectedInvoice.file_name || selectedInvoice.invoice_number)}
-                    className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/50 transition-colors cursor-pointer"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    Delete Invoice
-                  </button>
-                </div>
-                <div className="flex items-center gap-4 text-xs">
-                  {selectedInvoice.subtotal != null &&
-                  selectedInvoice.tax != null &&
-                  selectedInvoice.tax > 0 &&
-                  selectedInvoice.subtotal !== selectedInvoice.total ? (
-                    <>
-                      <span className="text-slate-500 dark:text-slate-400">
-                        Subtotal:{" "}
-                        <span className="tabular-nums font-semibold text-slate-700 dark:text-slate-300">
-                          ${selectedInvoice.subtotal.toFixed(2)}
-                        </span>
-                      </span>
-                      <span className="text-slate-500 dark:text-slate-400">
-                        Tax:{" "}
-                        <span className="tabular-nums font-semibold text-slate-700 dark:text-slate-300">
-                          ${selectedInvoice.tax.toFixed(2)}
-                        </span>
-                      </span>
-                    </>
-                  ) : null}
-                  <span className="text-sm font-bold text-[#1b2b4a] dark:text-slate-100">
-                    Total: <span className="tabular-nums">${selectedInvoice.total.toFixed(2)}</span>
-                  </span>
-                </div>
+                )}
               </div>
-            </div>
-          </div>
-        );
-      })()}
+            );
+          })
+        )}
+
+        {!loading && filtered.length > 0 && (
+          <p className="pt-4 text-xs text-ink-muted">
+            Showing {filtered.length} of {invoices.length} invoices
+          </p>
+        )}
+      </section>
     </div>
   );
 }
-

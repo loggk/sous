@@ -1,7 +1,5 @@
 "use client";
 
-import { Calendar, ChevronDown } from "lucide-react";
-
 export interface WindowOption {
   days: number;
   label: string;
@@ -9,17 +7,17 @@ export interface WindowOption {
 }
 
 export const DEFAULT_AUDIT_WINDOWS: WindowOption[] = [
-  { days: 14, label: "14 Days", sublabel: "Past 2 Weeks" },
-  { days: 30, label: "30 Days", sublabel: "Past Month" },
-  { days: 60, label: "60 Days", sublabel: "Past 2 Months" },
-  { days: 90, label: "90 Days", sublabel: "Past Quarter" },
-  { days: 180, label: "180 Days", sublabel: "Past 6 Months" },
-  { days: 365, label: "1 Year", sublabel: "Past 12 Months" },
+  { days: 14, label: "14d", sublabel: "Past 2 weeks" },
+  { days: 30, label: "30d", sublabel: "Past month" },
+  { days: 60, label: "60d", sublabel: "Past 2 months" },
+  { days: 90, label: "90d", sublabel: "Past quarter" },
+  { days: 180, label: "180d", sublabel: "Past 6 months" },
+  { days: 365, label: "1y", sublabel: "Past 12 months" },
 ];
 
 export const BENCHMARK_WINDOWS: WindowOption[] = [
-  { days: 30, label: "30 Days", sublabel: "Trailing Month" },
-  { days: 90, label: "90 Days", sublabel: "Trailing Quarter" },
+  { days: 30, label: "30d", sublabel: "Trailing month" },
+  { days: 90, label: "90d", sublabel: "Trailing quarter" },
 ];
 
 export interface AuditWindowControlProps {
@@ -30,34 +28,47 @@ export interface AuditWindowControlProps {
   className?: string;
 }
 
+/**
+ * Pass segmented control: every window is visible and one tap away, rather
+ * than hidden behind a select. Labels sit above, as everywhere else.
+ */
 export function AuditWindowControl({
   value,
   onChange,
   options = DEFAULT_AUDIT_WINDOWS,
-  label = "Audit Window",
+  label = "Audit window",
   className = "",
 }: AuditWindowControlProps) {
   return (
-    <div className={`inline-flex items-center gap-2 ${className}`}>
-      <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1.5 whitespace-nowrap">
-        <Calendar className="h-3.5 w-3.5 text-[#2f4a7d] dark:text-blue-400" />
-        <span>{label}:</span>
-      </label>
+    <fieldset className={`m-0 border-0 p-0 ${className}`}>
+      <legend className="label-caps pb-2">{label}</legend>
 
-      <div className="relative">
-        <select
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="cursor-pointer appearance-none rounded-xl border border-slate-200 bg-white pl-3 pr-8 py-1.5 text-xs font-bold text-[#1b2b4a] shadow-2xs hover:border-slate-300 focus:border-[#2f4a7d] focus:outline-none dark:border-slate-700 dark:bg-[#131f37] dark:text-slate-100 dark:focus:border-blue-400 transition-colors"
-        >
-          {options.map((opt) => (
-            <option key={opt.days} value={opt.days}>
-              {opt.label} ({opt.sublabel})
-            </option>
-          ))}
-        </select>
-        <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 dark:text-slate-400" />
+      <div className="flex overflow-hidden rounded-full border border-rule bg-panel">
+        {options.map((opt) => {
+          const isActive = opt.days === value;
+          return (
+            <label
+              key={opt.days}
+              title={opt.sublabel}
+              className={`flex min-h-11 min-w-[52px] cursor-pointer items-center justify-center px-3 text-[13px] transition-colors ${
+                isActive
+                  ? "bg-ink font-bold text-on-ink"
+                  : "font-semibold text-ink-soft hover:text-ink"
+              }`}
+            >
+              <input
+                type="radio"
+                name={`audit-window-${label.replace(/\s+/g, "-").toLowerCase()}`}
+                value={opt.days}
+                checked={isActive}
+                onChange={() => onChange(opt.days)}
+                className="absolute h-px w-px opacity-0"
+              />
+              {opt.label}
+            </label>
+          );
+        })}
       </div>
-    </div>
+    </fieldset>
   );
 }
