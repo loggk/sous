@@ -31,16 +31,24 @@ app.add_middleware(
 @app.middleware("http")
 async def normalize_vercel_rewrites(request: Request, call_next):
     """
-    Vercel rewrites send requests to /main.py, altering scope['path'].
+    Vercel rewrites send requests to /main.py?__vercel_path=$1, altering scope['path'].
     Normalize scope['path'] back to the intended application route.
     """
-    path = request.scope.get("path", "")
-    if path.startswith("/main.py"):
-        request.scope["path"] = path[len("/main.py"):] or "/"
-    elif path.startswith("/index.py"):
-        request.scope["path"] = path[len("/index.py"):] or "/"
+    # 1. Primary: path explicitly forwarded via rewrite query param
+    vercel_path = request.query_params.get("__vercel_path")
+    if vercel_path is not None:
+        if not vercel_path.startswith("/"):
+            vercel_path = "/" + vercel_path
+        request.scope["path"] = vercel_path
 
-    if request.scope.get("path") in ("/", "/main.py", "/index.py"):
+    # 2. Path prefixed with entrypoint
+    elif request.scope.get("path", "").startswith("/main.py/"):
+        request.scope["path"] = request.scope["path"][len("/main.py"):]
+    elif request.scope.get("path", "").startswith("/index.py/"):
+        request.scope["path"] = request.scope["path"][len("/index.py"):]
+
+    # 3. Path rewritten without query param; fallback to proxy headers
+    elif request.scope.get("path") in ("/", "/main.py", "/index.py"):
         original_route = (
             request.headers.get("x-matched-path")
             or request.headers.get("x-invoke-path")

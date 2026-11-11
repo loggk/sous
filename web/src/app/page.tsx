@@ -42,8 +42,8 @@ export default function DashboardPage() {
           api.getSpendSummary(windowDays),
           api.getPriceAlerts(),
         ]);
-        setSpend(spendData);
-        setAlerts(alertsData);
+        setSpend(spendData && typeof spendData === "object" && "total_spend" in spendData ? spendData : null);
+        setAlerts(Array.isArray(alertsData) ? alertsData : []);
       } catch (err: any) {
         setError(err.message || "Failed to load dashboard data. Ensure backend is running.");
       } finally {
@@ -78,7 +78,8 @@ export default function DashboardPage() {
     }
   }, [selectedAlert, windowDays]);
 
-  const totalAlertImpact = alerts.reduce((acc, curr) => acc + (curr.estimated_dollar_impact || 0), 0);
+  const safeAlerts = Array.isArray(alerts) ? alerts : [];
+  const totalAlertImpact = safeAlerts.reduce((acc, curr) => acc + (curr.estimated_dollar_impact || 0), 0);
   const feePct = spend && spend.total_spend > 0 ? (spend.fees_total / spend.total_spend) * 100 : null;
 
   const rankedCategories = Object.entries(spend?.by_category || {})
@@ -128,7 +129,7 @@ export default function DashboardPage() {
 
       {/* The one finding that matters */}
       <section className="section-open section-close flex flex-wrap items-center justify-between gap-10 py-8">
-        {alerts.length > 0 ? (
+        {safeAlerts.length > 0 ? (
           <>
             <div className="min-w-0 flex-[1_1_480px]">
               <span className="font-display text-[10px] font-bold uppercase tracking-[0.22em] text-over-ink">
@@ -137,7 +138,7 @@ export default function DashboardPage() {
               <div className="mt-2.5 flex flex-wrap items-baseline gap-3.5">
                 <span className="display-xl num text-5xl sm:text-6xl">+${money(totalAlertImpact)}</span>
                 <span className="text-sm font-semibold text-over-ink">
-                  across {alerts.length} {alerts.length === 1 ? "ingredient" : "ingredients"}
+                  across {safeAlerts.length} {safeAlerts.length === 1 ? "ingredient" : "ingredients"}
                 </span>
               </div>
               <p className="mt-3.5 max-w-xl text-[15px] leading-relaxed text-ink-soft">
@@ -154,7 +155,7 @@ export default function DashboardPage() {
             <div className="flex-[0_1_300px]">
               <span className="label-caps">Where it sits</span>
               <dl className="mt-3 space-y-2.5">
-                {alerts.slice(0, 5).map((alert) => (
+                {safeAlerts.slice(0, 5).map((alert) => (
                   <div key={alert.canonical_item_id} className="flex items-baseline justify-between gap-4">
                     <dt className="truncate text-sm text-ink-soft">{alert.item_name}</dt>
                     <dd className="num shrink-0 text-sm font-semibold text-ink">
@@ -162,15 +163,15 @@ export default function DashboardPage() {
                     </dd>
                   </div>
                 ))}
-                {alerts.length > 5 && (
+                {safeAlerts.length > 5 && (
                   <div className="flex items-baseline justify-between gap-4 border-t border-rule-soft pt-2.5">
                     <dt className="truncate text-sm text-ink-muted">
-                      and {alerts.length - 5} more
+                      and {safeAlerts.length - 5} more
                     </dt>
                     <dd className="num shrink-0 text-sm font-semibold text-ink">
                       +$
                       {money(
-                        alerts
+                        safeAlerts
                           .slice(5)
                           .reduce((acc, a) => acc + (a.estimated_dollar_impact || 0), 0)
                       )}
@@ -215,9 +216,9 @@ export default function DashboardPage() {
         </div>
         <div className="border-rule py-6 pl-7 sm:border-l">
           <span className="label-caps">Prices above baseline</span>
-          <div className="display-sm num mt-2 text-[27px]">{alerts.length}</div>
+          <div className="display-sm num mt-2 text-[27px]">{safeAlerts.length}</div>
           <p className="mt-1.5 text-xs text-ink-muted">
-            {alerts.length > 0 ? "Listed below, biggest impact first" : "All within your baseline"}
+            {safeAlerts.length > 0 ? "Listed below, biggest impact first" : "All within your baseline"}
           </p>
         </div>
       </section>
@@ -256,7 +257,7 @@ export default function DashboardPage() {
           </Link>
         </div>
 
-        {alerts.length === 0 ? (
+        {safeAlerts.length === 0 ? (
           <div className="flex items-start gap-3.5 border-b border-rule py-7">
             <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-under" />
             <div>
@@ -277,7 +278,7 @@ export default function DashboardPage() {
               <span className="label-caps text-right">{windowDays}-day impact</span>
             </div>
 
-            {alerts.map((alert) => {
+            {safeAlerts.map((alert) => {
               const unitDiff = alert.latest_price - alert.baseline_median;
               return (
                 <button
