@@ -153,7 +153,7 @@ export default function LoginPage() {
           <p className="mt-5 max-w-md text-[15px] leading-relaxed text-ramp-5">
             Upload your delivery invoices. Sous normalises every pack size, watches for prices
             creeping above your own baseline, and shows you the local median for the same ingredient
-            &mdash; pooled from independent operators, never attributed to anyone by name.
+            pooled from independent operators and never attributed to anyone by name.
           </p>
         </div>
 

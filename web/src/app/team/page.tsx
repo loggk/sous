@@ -228,7 +228,7 @@ export default function TeamPage() {
           </h1>
           <p className="mt-2.5 max-w-xl text-sm leading-relaxed text-ink-soft">
             Everyone here sees invoices, audits and benchmarks for the venues they are assigned to
-            &mdash; and nothing for the ones they are not.
+            and nothing for the ones they are not.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -596,7 +596,7 @@ export default function TeamPage() {
                   id="loc-name"
                   type="text"
                   required
-                  placeholder="Queen St Slice — Danforth"
+                  placeholder="Queen St Slice, Danforth"
                   value={newLocationName}
                   onChange={(e) => setNewLocationName(e.target.value)}
                   className="field"

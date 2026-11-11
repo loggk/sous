@@ -4,7 +4,7 @@ import "./globals.css";
 import { Navbar } from "@/components/Navbar";
 import { ConfirmProvider } from "@/context/ConfirmContext";
 
-/* Inter carries the data; Montserrat carries the logo's voice — the heavy
+/* Inter carries the data; Montserrat carries the logo's voice: the heavy
    geometric caps of SOUS and the wide-tracked COLLECTIVE beneath it. */
 const inter = Inter({
   variable: "--font-inter",

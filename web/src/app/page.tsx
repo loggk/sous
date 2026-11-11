@@ -80,7 +80,6 @@ export default function DashboardPage() {
 
   const totalAlertImpact = alerts.reduce((acc, curr) => acc + (curr.estimated_dollar_impact || 0), 0);
   const feePct = spend && spend.total_spend > 0 ? (spend.fees_total / spend.total_spend) * 100 : null;
-  const unmappedDrivers = spend?.top_items?.filter((i) => i.category === "Unmapped").length ?? 0;
 
   const rankedCategories = Object.entries(spend?.by_category || {})
     .filter(([, value]) => value > 0)
@@ -199,7 +198,7 @@ export default function DashboardPage() {
       </section>
 
       {/* Hairline stat row */}
-      <section className="section-close grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="section-close grid grid-cols-1 sm:grid-cols-3">
         <div className="py-6 pr-7">
           <span className="label-caps">Invoiced food spend</span>
           <div className="display-sm num mt-2 text-[27px]">${money(spend?.total_spend ?? 0)}</div>
@@ -214,24 +213,11 @@ export default function DashboardPage() {
               : "Fuel surcharges and delivery fees"}
           </p>
         </div>
-        <div className="border-rule px-7 py-6 lg:border-l">
+        <div className="border-rule py-6 pl-7 sm:border-l">
           <span className="label-caps">Prices above baseline</span>
           <div className="display-sm num mt-2 text-[27px]">{alerts.length}</div>
           <p className="mt-1.5 text-xs text-ink-muted">
             {alerts.length > 0 ? "Listed below, biggest impact first" : "All within your baseline"}
-          </p>
-        </div>
-        <div className="border-rule py-6 pl-7 sm:border-l">
-          <span className="label-caps">Unmapped cost drivers</span>
-          <div className="display-sm num mt-2 text-[27px]">{unmappedDrivers}</div>
-          <p className="mt-1.5 text-xs">
-            {unmappedDrivers > 0 ? (
-              <Link href="/review" className="font-semibold text-accent no-underline hover:underline">
-                Map them now &rarr;
-              </Link>
-            ) : (
-              <span className="text-ink-muted">Every top driver is mapped</span>
-            )}
           </p>
         </div>
       </section>

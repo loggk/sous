@@ -90,7 +90,7 @@ export default function InvoicesPage() {
       } else {
         setUploadStatus({
           type: "success",
-          message: `“${file.name}” is in. Reading the lines now — the table updates on its own.`,
+          message: `“${file.name}” is in. Reading the lines now; the table updates on its own.`,
         });
       }
 
@@ -129,7 +129,7 @@ export default function InvoicesPage() {
   async function handleDeleteInvoice(invoiceId: string, name: string) {
     const confirmed = await confirm({
       title: "Delete this invoice?",
-      message: `“${name}” and everything read from it — line items, price history, the lot — will be removed for good.`,
+      message: `“${name}” goes for good, along with everything read from it: line items, price history, the lot.`,
       confirmText: "Delete it",
       cancelText: "Keep it",
       variant: "danger",
@@ -215,7 +215,7 @@ export default function InvoicesPage() {
               {uploading ? "Reading it now…" : "Drop invoices here"}
             </span>
             <span className="text-[13px] text-ink-soft">
-              or <span className="font-semibold text-accent underline">browse your files</span> &mdash;
+              or <span className="font-semibold text-accent underline">browse your files</span>,
               up to 25&nbsp;MB each
             </span>
             <span className="text-xs text-ink-muted">
@@ -327,7 +327,7 @@ export default function InvoicesPage() {
         ) : filtered.length === 0 ? (
           <p className="py-10 text-center text-sm text-ink-soft">
             {invoices.length === 0
-              ? "Nothing filed yet — drop your first invoice in above."
+              ? "Nothing filed yet. Drop your first invoice in above."
               : "No invoices match those filters."}
           </p>
         ) : (
@@ -465,7 +465,7 @@ export default function InvoicesPage() {
                                   )}
                                 </td>
                                 <td className="border-b border-rule-soft px-3 py-2.5 text-ink-soft">
-                                  {l.pack_descriptor || "—"}
+                                  {l.pack_descriptor || "–"}
                                 </td>
                                 <td className="num border-b border-rule-soft px-3 py-2.5 text-right text-ink-soft">
                                   {l.quantity}
@@ -477,7 +477,7 @@ export default function InvoicesPage() {
                                   ${l.line_total.toFixed(2)}
                                 </td>
                                 <td className="num border-b border-rule-soft py-2.5 pl-3 text-right font-bold text-accent">
-                                  {l.price_per_base_unit ? `$${l.price_per_base_unit.toFixed(2)}` : "—"}
+                                  {l.price_per_base_unit ? `$${l.price_per_base_unit.toFixed(2)}` : "–"}
                                 </td>
                               </tr>
                             ))}

@@ -181,7 +181,7 @@ export function PriceCreepLineChart({
         <div className="border-rule px-5 py-4 sm:border-l">
           <span className="label-caps">Local median</span>
           <div className="num display-sm mt-1.5 text-base text-accent">
-            {median ? `$${median.toFixed(2)}` : "—"}
+            {median ? `$${median.toFixed(2)}` : "–"}
             <span className="text-xs font-normal text-ink-muted">/{baseUnit}</span>
           </div>
           <div className="text-[11px] text-ink-muted">

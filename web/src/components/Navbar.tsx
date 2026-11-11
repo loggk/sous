@@ -151,7 +151,7 @@ export function Navbar() {
             />
           </Link>
 
-          {/* Tracked uppercase, underlined on the current page — the logo's
+          {/* Tracked uppercase, underlined on the current page: the logo's
               COLLECTIVE lettering used as navigation. */}
           <nav className="hidden md:flex items-center gap-7">
             {navItems.map((item) => {

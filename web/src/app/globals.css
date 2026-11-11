@@ -3,7 +3,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* ---------------------------------------------------------------------------
-   Pass — the Sous design tokens, taken off the logo.
+   Pass: the Sous design tokens, taken off the logo.
    Navy ink, one slate-blue accent, warm paper ground. Every colour used in the
    product should come from here; no raw hexes in components.
    --------------------------------------------------------------------------- */
@@ -12,7 +12,7 @@
   /* Surfaces */
   --paper: #f7f4ed;        /* page ground */
   --paper-raised: #fcfaf5; /* app bar, sticky chrome */
-  --panel: #fffdf8;        /* charts and forms only — never a card in a card */
+  --panel: #fffdf8;        /* charts and forms only, never a card in a card */
 
   /* Ink */
   --ink: #17294b;          /* logo navy */
@@ -31,7 +31,7 @@
   --chip: #ede7da;         /* neutral chip fill */
   --grid: #ede7da;         /* chart gridlines */
 
-  /* Status — always shipped with a label and an arrow, never colour alone */
+  /* Status: always shipped with a label and an arrow, never colour alone */
   --over: #b2532b;
   --over-ink: #8e3f1e;
   --over-wash: #f6e8df;
@@ -39,7 +39,7 @@
   --under-ink: #0b584e;
   --under-wash: #e4f1ee;
 
-  /* Ranked navy ramp, light to dark — for anything ordered by size */
+  /* Ranked navy ramp, light to dark, for anything ordered by size */
   --ramp-1: #17294b;
   --ramp-2: #2b4675;
   --ramp-3: #3f639c;

@@ -281,8 +281,7 @@ function BenchmarkContent() {
         <span className="eyebrow">Local market</span>
         <h1 className="display-xl mt-2 text-4xl sm:text-[46px]">Benchmarks</h1>
         <p className="mt-2.5 max-w-2xl text-sm leading-relaxed text-ink-soft">
-          What independent kitchens around you actually pay for the same ingredient. Pooled and
-          anonymised &mdash; never attributed to a named restaurant.
+          What independent kitchens around you actually pay for the same ingredient.
         </p>
       </div>
 
@@ -464,7 +463,7 @@ function BenchmarkContent() {
             benchmark && (
               <>
                 {/* Verdict */}
-                <div className="section-open pt-6">
+                <div className="pt-6">
                   <div className="flex flex-wrap items-baseline gap-2.5">
                     <h2 className="display-xl text-3xl">{selectedItem?.name || "Select an item"}</h2>
                     <span className="text-sm text-ink-muted">
@@ -481,7 +480,7 @@ function BenchmarkContent() {
                           <span className="num text-over-ink">
                             ${money(Math.abs(gapAbs))} over
                           </span>{" "}
-                          the local median &mdash; {gapPct.toFixed(1)}% above what kitchens around you pay.
+                          the local median, {gapPct.toFixed(1)}% above what kitchens around you pay.
                         </>
                       ) : (
                         <>
@@ -521,7 +520,7 @@ function BenchmarkContent() {
                       />
                     </div>
                     <p className="mt-1 pb-2 text-[13px] text-ink-soft">
-                      The band is the middle half of the cohort &mdash; a quarter of kitchens pay less
+                      The band is the middle half of the cohort: a quarter of kitchens pay less
                       than ${money(benchmark.p25)}, a quarter pay more than ${money(benchmark.p75)}.
                     </p>
                   </div>

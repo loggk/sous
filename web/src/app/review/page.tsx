@@ -261,7 +261,7 @@ export default function ReviewPage() {
                 are mapped they sit outside your category totals and benchmarks.
               </p>
               <p className="mt-3 text-sm text-ink-soft">
-                Most take one click &mdash; the top suggestion is usually the right one.
+                Most take one click. The top suggestion is usually the right one.
               </p>
             </div>
             <div className="flex-[0_1_260px]">
@@ -381,7 +381,7 @@ export default function ReviewPage() {
             {/* Mapping panel */}
             {currentItem && (
               <div className="min-w-0 flex-[999_1_540px]">
-                <div className="section-open flex flex-wrap items-center justify-between gap-3 pt-5">
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-5">
                   <span className="label-caps">
                     Line {currentIndex + 1} of {filteredReviews.length} · as printed on the invoice
                   </span>
@@ -577,7 +577,7 @@ export default function ReviewPage() {
                     </h3>
                     <span className="text-xs text-ink-muted">
                       {currentItem.payload?.pack_descriptor
-                        ? `Read from “${currentItem.payload.pack_descriptor}” — correct it if it's wrong`
+                        ? `Read from “${currentItem.payload.pack_descriptor}”. Correct it if it's wrong`
                         : "Set this so the unit price can be compared"}
                     </span>
                   </div>
@@ -658,7 +658,7 @@ export default function ReviewPage() {
                       disabled={resolving}
                       className="pill-secondary disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      Not food &mdash; skip
+                      Skip this line
                     </button>
                   </div>
                   <span className="text-xs text-ink-muted">
