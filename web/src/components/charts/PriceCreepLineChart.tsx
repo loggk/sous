@@ -163,7 +163,7 @@ export function PriceCreepLineChart({
                 ) : diffPeer < 0 ? (
                   <span className="flex items-center text-under-ink">
                     <ArrowDownRight className="h-3.5 w-3.5" />
-                    &minus;${Math.abs(diffPeer).toFixed(2)} ({pctPeer.toFixed(1)}%)
+                    −${Math.abs(diffPeer).toFixed(2)} ({pctPeer.toFixed(1)}%)
                   </span>
                 ) : (
                   <span className="text-ink-soft">Level with the median</span>
@@ -228,7 +228,7 @@ export function PriceCreepLineChart({
         {p25 !== undefined && p75 !== undefined && p25 !== null && p75 !== null && (
           <div className="flex items-center gap-2">
             <span className="h-2.5 w-4 rounded-sm bg-accent/20" />
-            <span className="text-ink-soft">Middle half (p25&ndash;p75)</span>
+            <span className="text-ink-soft">Middle half (p25–p75)</span>
           </div>
         )}
 

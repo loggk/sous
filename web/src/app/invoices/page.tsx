@@ -394,7 +394,7 @@ export default function InvoicesPage() {
                       onClick={() => handleOpenPdf(inv)}
                       className="cursor-pointer text-[12.5px] font-semibold text-accent hover:underline"
                     >
-                      PDF &nearr;
+                      PDF ↗
                     </button>
                   </span>
                 </div>
@@ -497,7 +497,7 @@ export default function InvoicesPage() {
                             rel="noopener noreferrer"
                             className="text-xs font-semibold text-accent no-underline hover:underline"
                           >
-                            Open in a new tab &nearr;
+                            Open in a new tab ↗
                           </a>
                         </div>
                         <iframe
